@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="theme-color" content="#030405">
+    <title>Acuwealth | Personal finance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </head>
+  <body>
+    <main class="landing-page" id="landingPage">
+      <section class="landing-hero" id="home" aria-labelledby="landingHeadline">
+        <video
+          class="landing-hero-video"
+          id="landingHeroVideo"
+          aria-hidden="true"
+          muted
+          playsinline
+          preload="auto"
+        >
+          <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260405_074625_a81f018a-956b-43fb-9aee-4d1508e30e6a.mp4" type="video/mp4">
+        </video>
+        <div class="landing-hero-shade" aria-hidden="true"></div>
+        <header class="landing-nav liquid-glass">
+          <a class="landing-brand" href="#home" aria-label="Acuwealth home">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path>
+            </svg>
+            <span>Acuwealth</span>
+          </a>
+          <nav class="landing-links" aria-label="Page sections">
+            <a href="#features">Features</a>
+            <a href="#currencies">Currencies</a>
+            <a href="#about">About</a>
+          </nav>
+          <div class="landing-nav-actions">
+            <button class="landing-signup-link" type="button" data-open-auth="signup">Sign up</button>
+            <button class="landing-login-button liquid-glass" type="button" data-open-auth="login">Log in</button>
+          </div>
+        </header>
+
+        <div class="landing-hero-content">
+          <p class="landing-eyebrow">A clearer way to see your money</p>
+          <h1 id="landingHeadline">Track your money.<br><em>Understand the whole picture.</em></h1>
+          <form class="landing-email-form liquid-glass" id="landingSignupForm">
+            <label class="visually-hidden" for="landingEmail">Email address</label>
+            <input id="landingEmail" type="email" autocomplete="email" placeholder="Enter your email to get started" required>
+            <button type="submit" aria-label="Start creating your account">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"></path></svg>
+            </button>
+          </form>
+          <p class="landing-hero-description">Log income and expenses, follow your monthly cash flow, and review totals in the currency you call home.</p>
+          <a class="landing-glass-button" href="#about">Explore your finances</a>
+        </div>
+
+        <div class="landing-hero-shortcuts" aria-label="Explore Acuwealth">
+          <a class="liquid-glass" href="#features" aria-label="Explore finance features">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19V5m0 14h17M7 15l4-4 3 2 6-7"></path></svg>
+          </a>
+          <a class="liquid-glass" href="#currencies" aria-label="Explore currency tools">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+          </a>
+          <button class="liquid-glass" type="button" data-open-auth="signup" aria-label="Create an Acuwealth account">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m12-16.5a4 4 0 0 1 0 7.75M22 21v-2a4 4 0 0 0-3-3.87M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path></svg>
+          </button>
+        </div>
+        <span class="landing-scroll-note" aria-hidden="true">SCROLL TO EXPLORE</span>
+      </section>
+
+      <section class="landing-about landing-section" id="about" aria-labelledby="aboutHeading">
+        <div class="landing-about-glow" aria-hidden="true"></div>
+        <div class="landing-section-inner">
+          <p class="landing-label reveal">A clearer way to manage money</p>
+          <h2 class="landing-about-heading reveal" id="aboutHeading">Every transaction, organized. <em>Your finances, in view.</em></h2>
+          <p class="landing-about-copy reveal">Record income and expenses by category, review how your cash flow changes month to month, and see totals in your preferred currency.</p>
+        </div>
+      </section>
+
+      <section class="landing-featured landing-section" aria-labelledby="approachHeading">
+        <div class="landing-featured-frame reveal">
+          <video class="landing-section-video" muted loop playsinline preload="metadata" data-landing-video>
+            <source data-lazy-src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260402_054547_9875cfc5-155a-4229-8ec8-b7ba7125cbf8.mp4" type="video/mp4">
+          </video>
+          <div class="landing-video-shade" aria-hidden="true"></div>
+          <div class="landing-featured-copy">
+            <div class="landing-glass-card">
+              <p class="landing-label">Your financial overview</p>
+              <h2 id="approachHeading">Know what came in. Know what went out.</h2>
+              <p>See your balance, monthly income and expenses, cash-flow history, spending categories, and recent transactions together.</p>
+            </div>
+            <button class="landing-glass-button" type="button" data-open-auth="signup">Start tracking</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-philosophy landing-section" id="features" aria-labelledby="featuresHeading">
+        <div class="landing-section-inner">
+          <h2 class="landing-section-title reveal" id="featuresHeading">Track it. <em>Understand it.</em></h2>
+          <div class="landing-philosophy-grid">
+            <div class="landing-philosophy-media reveal">
+              <video class="landing-section-video" muted loop playsinline preload="metadata" data-landing-video>
+                <source data-lazy-src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260307_083826_e938b29f-a43a-41ec-a153-3d4730578ab8.mp4" type="video/mp4">
+              </video>
+              <div class="landing-video-shade" aria-hidden="true"></div>
+              <span class="landing-media-caption">A complete view of your financial activity</span>
+            </div>
+            <div class="landing-philosophy-copy reveal">
+              <article>
+                <p class="landing-label">Income and expenses</p>
+                <p>Record money coming in and going out, organize each transaction by category and date, and review your monthly net alongside your balance.</p>
+              </article>
+              <article>
+                <p class="landing-label">Categories and cash flow</p>
+                <p>Compare income and expenses over time, see where spending is concentrated, and search or filter your transaction history when you need the details.</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-services landing-section" id="currencies" aria-labelledby="servicesHeading">
+        <div class="landing-section-inner">
+          <header class="landing-services-heading reveal">
+            <h2 id="servicesHeading">Manage money with a clearer view.</h2>
+            <p>TRACKING &amp; CURRENCY</p>
+          </header>
+          <div class="landing-service-grid">
+            <article class="landing-service-card liquid-glass reveal">
+              <div class="landing-service-media">
+                <video class="landing-section-video" muted loop playsinline preload="metadata" data-landing-video>
+                  <source data-lazy-src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260402_054547_9875cfc5-155a-4229-8ec8-b7ba7125cbf8.mp4" type="video/mp4">
+                </video>
+                <div class="landing-video-shade" aria-hidden="true"></div>
+              </div>
+              <div class="landing-service-copy">
+                <p class="landing-label">INCOME &amp; EXPENSES</p>
+                <h3>Keep every transaction in view.</h3>
+                <p>Add income and expenses with a category, date, note, and original currency. Search and filter your activity whenever you need a closer look.</p>
+              </div>
+            </article>
+            <article class="landing-service-card liquid-glass reveal">
+              <div class="landing-service-media">
+                <video class="landing-section-video" muted loop playsinline preload="metadata" data-landing-video>
+                  <source data-lazy-src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260307_083826_e938b29f-a43a-41ec-a153-3d4730578ab8.mp4" type="video/mp4">
+                </video>
+                <div class="landing-video-shade" aria-hidden="true"></div>
+              </div>
+              <div class="landing-service-copy">
+                <p class="landing-label">MULTI-CURRENCY</p>
+                <h3>Your money, in the currency you choose.</h3>
+                <p>Keep original transaction amounts intact while reviewing converted totals in your preferred display currency, with exchange-rate availability made clear.</p>
+              </div>
+            </article>
+          </div>
+          <div class="landing-final-cta reveal">
+            <p class="landing-label">Start with your financial picture</p>
+            <h2>Track today. Understand what comes next.</h2>
+            <button class="landing-glass-button" type="button" data-open-auth="signup">Start managing your money</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="landing-footer">
+        <a class="landing-brand" href="#home" aria-label="Acuwealth home">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+          <span>Acuwealth</span>
+        </a>
+        <p>Income, expenses, cash flow, and currency in one clear view.</p>
+        <button type="button" data-open-auth="login">Log in</button>
+      </footer>
+    </main>
+
+    <main class="auth-shell" id="authShell" hidden>
+      <header class="auth-nav liquid-glass">
+        <a class="auth-brand" href="/" aria-label="Acuwealth home">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path>
+          </svg>
+          <span>Acuwealth</span>
+        </a>
+        <nav class="auth-nav-actions" aria-label="Account access">
+          <button type="button" class="auth-nav-link" data-auth-mode="signup">Sign up</button>
+          <button type="button" class="auth-nav-login" data-auth-mode="login">Log in</button>
+        </nav>
+        <button class="button theme-toggle" type="button" aria-label="Use light appearance" aria-pressed="true" title="Change appearance" data-theme="dark">
+          <span class="theme-toggle-track" aria-hidden="true">
+            <span class="theme-toggle-icon theme-toggle-sun"></span>
+            <span class="theme-toggle-icon theme-toggle-moon"></span>
+            <span class="theme-toggle-indicator"></span>
+          </span>
+        </button>
+      </header>
+      <div class="auth-layout">
+        <aside class="auth-aside" aria-label="Acuwealth features">
+          <div class="auth-aside-copy">
+            <p class="auth-kicker">FINANCE TRACKING &amp; MANAGEMENT</p>
+            <h1 id="authHeroHeading"><span id="authHeroLead">Know your wealth,</span> <em id="authHeroEmphasis">in focus.</em></h1>
+            <p class="auth-aside-description" id="authHeroDescription">Track every transaction, understand your monthly cash flow, and see your money in one clear view.</p>
+            <div class="auth-proof" aria-label="Acuwealth features">
+              <div><span>01</span><strong>Income &amp; expenses</strong></div>
+              <div><span>02</span><strong>Categories &amp; cash flow</strong></div>
+              <div><span>03</span><strong>Currency-aware totals</strong></div>
+            </div>
+          </div>
+        </aside>
+        <section class="auth-form-wrap" aria-labelledby="authHeading">
+          <div class="auth-mode-tabs" role="tablist" aria-label="Choose login or sign up">
+            <button class="auth-mode-tab is-active" id="authModeLogin" type="button" role="tab" aria-selected="true" data-auth-mode="login">Log in</button>
+            <button class="auth-mode-tab" id="authModeSignup" type="button" role="tab" aria-selected="false" data-auth-mode="signup">Sign up</button>
+          </div>
+          <button class="auth-back-button" id="authBack" type="button">Back to Acuwealth</button>
+          <div class="auth-form-heading">
+            <p class="auth-kicker" id="authKicker">WELCOME BACK</p>
+            <h2 id="authHeading">Good to have you back.</h2>
+            <p class="auth-description" id="authDescription">Sign in to pick up where you left off.</p>
+          </div>
+          <form class="auth-form" id="authForm">
+            <label class="field" id="nameField" hidden>
+              <span>Your name</span>
+              <input type="text" name="name" autocomplete="name" minlength="2" maxlength="80" data-smooth-input data-animated-input>
+            </label>
+            <label class="field">
+              <span>Email address</span>
+              <input type="email" name="email" autocomplete="email" maxlength="254" required data-smooth-input data-animated-input>
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input type="password" name="password" autocomplete="current-password" minlength="10" maxlength="128" required data-smooth-input data-animated-input>
+              <span class="password-strength" id="passwordStrength" hidden>
+                <span class="password-strength-heading">
+                  <span>Password strength</span>
+                  <span id="passwordStrengthLabel">Start typing</span>
+                </span>
+                <span class="password-strength-track" id="passwordStrengthMeter" role="meter" aria-label="Password strength" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Start typing">
+                  <span class="password-strength-fill" id="passwordStrengthFill"></span>
+                </span>
+              </span>
+              <span class="field-help" id="passwordHelp" hidden>Use at least 10 characters.</span>
+            </label>
+            <p class="form-error" id="authError" role="alert" hidden></p>
+            <button class="button button-primary button-wide" id="authSubmit" type="submit">Sign in</button>
+          </form>
+          <p class="auth-switch">
+            <span id="authSwitchLabel">New to Acuwealth?</span>
+            <button class="text-button" id="authSwitch" type="button">Create an account</button>
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <div class="app-shell" id="appShell" hidden>
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="#overview" aria-label="Acuwealth overview">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+          </span>
+          <span>Acuwealth</span>
+        </a>
+        <p class="nav-caption">WORKSPACE</p>
+        <nav class="primary-nav">
+          <button class="nav-link is-active" type="button" data-view="overview" aria-current="page">
+            <span class="nav-indicator" aria-hidden="true"></span>
+            Overview
+          </button>
+          <button class="nav-link" type="button" data-view="transactions">
+            <span class="nav-indicator" aria-hidden="true"></span>
+            Transactions
+          </button>
+          <button class="nav-link" type="button" data-view="settings">
+            <span class="nav-indicator" aria-hidden="true"></span>
+            Preferences
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-content" id="mainContent">
+        <header class="topbar">
+          <div class="mobile-brand">
+            <span class="brand-mark brand-mark-small" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+            </span>
+            <span>Acuwealth</span>
+          </div>
+          <div class="topbar-context">
+            <span id="breadcrumb">Overview</span>
+            <span class="topbar-date" id="currentDate"></span>
+          </div>
+          <div class="topbar-actions">
+            <button class="button theme-toggle" id="themeToggle" type="button" aria-label="Use light appearance" aria-pressed="true" title="Change appearance" data-theme="dark">
+              <span class="theme-toggle-track" aria-hidden="true">
+                <span class="theme-toggle-icon theme-toggle-sun"></span>
+                <span class="theme-toggle-icon theme-toggle-moon"></span>
+                <span class="theme-toggle-indicator"></span>
+              </span>
+            </button>
+            <button class="button button-primary" id="addTransactionButton" type="button">Add transaction</button>
+            <div class="profile-menu-wrap">
+              <button class="profile-menu-button" id="profileMenuButton" type="button" aria-label="Profile options" aria-haspopup="true" aria-expanded="false" aria-controls="profileMenu">
+                <span class="profile-avatar" id="profileInitials" aria-hidden="true">A</span>
+                <span class="profile-menu-name" id="profileMenuName">Your account</span>
+                <svg class="profile-menu-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4"></path>
+                </svg>
+              </button>
+              <div class="profile-menu" id="profileMenu" role="group" aria-label="Profile options" hidden>
+                <button class="profile-menu-action" type="button" data-account-action="switch">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm10-2v6m-3-3h6"></path>
+                  </svg>
+                  <span>Switch account</span>
+                </button>
+                <button class="profile-menu-action profile-menu-logout" type="button" data-account-action="logout">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M10 17l5-5-5-5M15 12H3m9-8h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"></path>
+                  </svg>
+                  <span>Log out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div class="page-content" id="pageContent" aria-live="polite">
+          <section class="page-view" id="overviewView">
+            <div class="page-heading">
+              <div>
+                <h1>Your money, at a glance.</h1>
+                <p class="page-subtitle" id="monthLabel"></p>
+              </div>
+              <div class="currency-control">
+                <label for="overviewCurrency">Viewing in</label>
+                <select id="overviewCurrency" aria-label="Dashboard display currency"></select>
+              </div>
+            </div>
+
+            <section class="summary-grid" aria-label="Monthly money summary">
+              <article class="balance-panel">
+                <div class="balance-panel-top">
+                  <span>Total balance</span>
+                  <span class="balance-period">Across all activity</span>
+                </div>
+                <p class="balance-amount" id="balanceAmount">Loading</p>
+                <p class="balance-caption" id="balanceCaption">Your income minus your spending</p>
+                <div class="balance-meta">
+                  <span>MONTHLY NET</span>
+                  <strong id="monthlyNet">Loading</strong>
+                </div>
+              </article>
+              <article class="summary-stat">
+                <div class="stat-heading"><span>Income this month</span><span class="stat-mark income-mark" aria-hidden="true">IN</span></div>
+                <p class="stat-value income-text" id="incomeAmount">Loading</p>
+                <p class="stat-detail">Money received this month</p>
+              </article>
+              <article class="summary-stat">
+                <div class="stat-heading"><span>Expenses this month</span><span class="stat-mark expense-mark" aria-hidden="true">OUT</span></div>
+                <p class="stat-value expense-text" id="expenseAmount">Loading</p>
+                <p class="stat-detail">Money spent this month</p>
+              </article>
+            </section>
+
+            <p class="rate-notice" id="rateNotice" role="status" hidden></p>
+            <section class="overview-grid">
+              <article class="content-panel cashflow-panel">
+                <div class="section-heading">
+                  <div>
+                    <h2>Cash flow</h2>
+                    <p>Income and expenses over the last six months</p>
+                  </div>
+                  <span class="chart-legend"><span class="legend-income"></span>Income <span class="legend-expense"></span>Expenses</span>
+                </div>
+                <div class="chart" id="cashflowChart" aria-label="Six-month income and expense chart" role="img"></div>
+              </article>
+              <article class="content-panel categories-panel">
+                <div class="section-heading">
+                  <div>
+                    <h2>Spending by category</h2>
+                    <p>This month</p>
+                  </div>
+                </div>
+                <div class="category-list" id="categoryList"></div>
+              </article>
+            </section>
+
+            <section class="content-panel recent-panel">
+              <div class="section-heading">
+                <div>
+                  <h2>Recent transactions</h2>
+                  <p>Your latest income and expenses</p>
+                </div>
+                <button class="text-button" type="button" data-view="transactions">All transactions</button>
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr><th scope="col">Transaction</th><th scope="col">Category</th><th scope="col">Date</th><th scope="col" class="amount-column">Amount</th></tr>
+                  </thead>
+                  <tbody id="recentTransactions"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="page-view" id="transactionsView" hidden>
+            <div class="page-heading transaction-page-heading">
+              <div>
+                <h1>Your transactions.</h1>
+                <p class="page-subtitle">A closer look at the money coming in and going out.</p>
+              </div>
+              <div class="transaction-filters" role="group" aria-label="Filter transactions">
+                <button class="filter-button is-selected" type="button" data-filter="all" aria-pressed="true">All</button>
+                <button class="filter-button" type="button" data-filter="income" aria-pressed="false">Income</button>
+                <button class="filter-button" type="button" data-filter="expense" aria-pressed="false">Expenses</button>
+              </div>
+            </div>
+            <label class="search-field">
+              <span class="visually-hidden">Search transactions</span>
+              <input id="transactionSearch" type="search" placeholder="Search by name or category" maxlength="80" data-smooth-input>
+            </label>
+            <section class="content-panel transactions-panel" aria-label="Transaction list">
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr><th scope="col">Transaction</th><th scope="col">Category</th><th scope="col">Date</th><th scope="col" class="amount-column">Amount</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+                  </thead>
+                  <tbody id="allTransactions"></tbody>
+                </table>
+              </div>
+            </section>
+            <p class="table-caption">Showing up to 100 recent transactions.</p>
+          </section>
+
+          <section class="page-view" id="settingsView" hidden>
+            <div class="page-heading">
+              <div>
+                <h1>Preferences.</h1>
+                <p class="page-subtitle">Make your money view feel like yours.</p>
+              </div>
+            </div>
+            <section class="content-panel settings-panel">
+              <div class="settings-copy">
+                <h2>Display currency</h2>
+                <p>Dashboard totals and converted amounts use recent exchange rates. Your original transaction amounts stay unchanged.</p>
+              </div>
+              <form id="preferencesForm" class="preferences-form">
+                <label class="field">
+                  <span>Show dashboard amounts in</span>
+                  <select id="settingsCurrency" required></select>
+                </label>
+                <p class="form-error" id="preferencesError" role="alert" hidden></p>
+                <button class="button button-primary" type="submit">Save preference</button>
+            </form>
+            <p class="settings-rate" id="settingsRateStatus"></p>
+          </section>
+
+        </div>
+      </main>
+    </div>
+
+    <dialog class="transaction-dialog" id="transactionDialog" aria-labelledby="transactionDialogTitle">
+      <form class="dialog-form" id="transactionForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="dialog-kicker">NEW TRANSACTION</p>
+            <h2 id="transactionDialogTitle">Add to your activity.</h2>
+          </div>
+          <button class="dialog-close" id="closeTransactionDialog" type="button">Close</button>
+        </div>
+        <fieldset class="kind-options">
+          <legend>Transaction type</legend>
+          <label><input type="radio" name="kind" value="expense" checked><span>Expense</span></label>
+          <label><input type="radio" name="kind" value="income"><span>Income</span></label>
+        </fieldset>
+        <div class="form-grid">
+          <label class="field field-full">
+            <span>Description</span>
+            <input name="description" type="text" maxlength="120" placeholder="For example, rent or monthly pay" required data-smooth-input data-animated-input>
+          </label>
+          <label class="field">
+            <span>Amount</span>
+            <input name="amount" type="number" min="0.01" max="999999999999.99" step="0.01" inputmode="decimal" placeholder="0.00" required data-animated-input>
+          </label>
+          <label class="field">
+            <span>Currency</span>
+            <select name="currency" id="transactionCurrency" required></select>
+          </label>
+          <p class="conversion-preview field-full" id="conversionPreview" aria-live="polite"></p>
+          <label class="field">
+            <span>Category</span>
+            <select name="category" id="transactionCategory" required></select>
+          </label>
+          <label class="field">
+            <span>Date</span>
+            <input name="occurred_on" id="transactionDate" type="date" required>
+          </label>
+        </div>
+        <p class="form-error" id="transactionError" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" id="cancelTransaction" type="button">Cancel</button>
+          <button class="button button-primary" id="saveTransaction" type="submit">Save transaction</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

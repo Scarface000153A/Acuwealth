@@ -195,8 +195,9 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             try:
                 connection.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT DEFAULT {default}")
                 connection.commit()
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc).lower():
+                    raise
 
     limiter = RateLimiter()
 
@@ -402,6 +403,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if request.path.startswith("/api/"):
             return jsonify(error="Resource not found."), 404
         return render_template("404.html", csrf_token=csrf_token(), year=date.today().year), 404
+
+    @app.errorhandler(500)
+    def internal_server_error(_error: Any) -> Any:
+        if request.path.startswith("/api/"):
+            return jsonify(error="A server error occurred while processing your request. Please try again."), 500
+        return "An internal server error occurred.", 500
 
     @app.get("/api/session")
     def session_state() -> Any:

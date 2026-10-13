@@ -215,7 +215,22 @@
       credentials: "same-origin",
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
-    const data = await response.json();
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      throw new ApiError(
+        `The server returned a web page instead of API data (HTTP ${response.status}). Check that Render is deploying Acuwealth as a Python Web Service, not a Static Site.`,
+        response.status,
+      );
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new ApiError("The server returned an invalid response. Please try again.", response.status);
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new ApiError("The server returned an invalid response. Please try again.", response.status);
+    }
     if (!response.ok) throw new ApiError(data.error || "Something went wrong. Please try again.", response.status);
     if (typeof data.csrf_token === "string") {
       state.csrfToken = data.csrf_token;

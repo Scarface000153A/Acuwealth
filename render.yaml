@@ -1,14 +1,11 @@
-# Render configuration for Acuwealth (Python / Flask)
-
-buildpacks:
-  - https://github.com/heroku/buildpack-python.git
-
 services:
   - type: web
     name: acuwealth
-    env: python
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
     envVars:
       - key: APP_ENV
         value: production
+      - key: SECRET_KEY
+        generateValue: true

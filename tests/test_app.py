@@ -126,6 +126,22 @@ class FinanceAppTests(unittest.TestCase):
         self.assertIsNone(bootstrap.json["user"])
         self.assertTrue(bootstrap.json["csrf_token"])
 
+    def test_api_server_errors_return_json(self):
+        broken_database = Path(self.temp_dir.name) / "database-directory"
+        broken_database.mkdir()
+        self.app.config["DATABASE"] = str(broken_database)
+        self.app.config["PROPAGATE_EXCEPTIONS"] = False
+
+        response = self.client.post(
+            "/api/auth/login",
+            json={"email": "maya@example.com", "password": "good-password-123"},
+            headers=self.headers(),
+        )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.mimetype, "application/json")
+        self.assertIn("server error", response.json["error"].lower())
+
     def test_transaction_is_saved_in_its_original_currency_and_is_user_scoped(self):
         self.sign_up()
         self.csrf_token = self.client.get("/api/me").json["csrf_token"]

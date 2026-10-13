@@ -38,9 +38,12 @@ The sign-in/sign-up panel and the dashboard content animate into view, and anima
 ## Configuration
 
 - `SECRET_KEY`: set a persistent, private random value before deploying.
-- `APP_DATABASE`: optional SQLite database path. Defaults to `instance/acuwealth.sqlite3`.
+- `DATABASE_URL`: optional PostgreSQL connection URL. When set, PostgreSQL is used instead of SQLite.
+- `APP_DATABASE`: optional SQLite database path for local development. Defaults to `instance/acuwealth.sqlite3`.
 - `APP_ENV=production`: enables secure session cookies. Serve the site over HTTPS in production.
 - `PORT`: optional development-server port. Defaults to `5000`.
+
+For Render, create a PostgreSQL database, then set the web service's `DATABASE_URL` environment variable to the database's **Internal Database URL** and redeploy. The app creates its PostgreSQL tables automatically. SQLite is suitable for local development; Render's default filesystem is ephemeral, so do not use SQLite there for data that must persist. Configuring PostgreSQL does not copy existing SQLite records; migrate any data you need before switching.
 
 The Flask development server is intended for local development. Deploy behind a production WSGI server and HTTPS before exposing the app publicly.
 

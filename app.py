@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_salt TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     currency TEXT NOT NULL DEFAULT 'INR',
+    utm_source TEXT DEFAULT '',
+    utm_medium TEXT DEFAULT '',
+    utm_campaign TEXT DEFAULT '',
+    email_opt_out INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
@@ -101,6 +105,43 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
 
 class ExchangeRateUnavailable(Exception):
     pass
+
+
+class RateLimiter:
+    """Simple per-IP + per-endpoint token bucket.
+
+    Disabled entirely when ``APP_ENV`` is not ``production`` so that
+    local development and the test suite are unaffected.
+    """
+
+    def __init__(self, requests_per_minute: int = 60) -> None:
+        self.enabled = os.environ.get("APP_ENV") == "production"
+        self.requests_per_minute = max(1, requests_per_minute)
+        self.buckets: dict[tuple[str, str], tuple[float, int]] = {}
+
+    def allow(self, key: str, *, limit: int | None = None) -> bool:
+        if not self.enabled:
+            return True
+        effective_limit = limit if limit is not None else self.requests_per_minute
+        now = time.monotonic()
+        window_start, tokens = self.buckets.get(key, (now, effective_limit))
+        elapsed = now - window_start
+        if elapsed >= 60:
+            tokens = effective_limit
+            window_start = now
+        else:
+            tokens = min(effective_limit, tokens + elapsed * effective_limit / 60.0)
+        if tokens < 1:
+            self.buckets[key] = (window_start, tokens)
+            return False
+        self.buckets[key] = (window_start, tokens - 1)
+        return True
+
+    def client_key(self) -> str:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",", 1)[0].strip() or request.remote_addr or "unknown"
+        return request.remote_addr or "unknown"
 
 
 def utc_now() -> datetime:
@@ -144,8 +185,26 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     if test_config:
         app.config.update(test_config)
 
+    def run_migrations(connection: sqlite3.Connection) -> None:
+        for column, default in (
+            ("utm_source", "''"),
+            ("utm_medium", "''"),
+            ("utm_campaign", "''"),
+            ("email_opt_out", "0"),
+        ):
+            try:
+                connection.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT DEFAULT {default}")
+                connection.commit()
+            except sqlite3.OperationalError:
+                pass
+
+    limiter = RateLimiter()
+
     @app.before_request
     def protect_state_changes() -> Any:
+        # Exempt public endpoints from CSRF protection
+        if request.path in ["/api/unsubscribe", "/api/data-request-public"]:
+            return None
         if request.method in {"POST", "PATCH", "PUT", "DELETE"}:
             supplied = request.headers.get("X-CSRF-Token", "")
             expected = session.get("csrf_token", "")
@@ -162,6 +221,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(SCHEMA)
+            run_migrations(connection)
             g.db = connection
         return g.db
 
@@ -315,7 +375,33 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/")
     def index() -> str:
-        return render_template("index.html", csrf_token=csrf_token())
+        return render_template("index.html", csrf_token=csrf_token(), year=date.today().year)
+
+    @app.get("/privacy")
+    def privacy_policy() -> str:
+        return render_template("privacy.html", csrf_token=csrf_token(), year=date.today().year)
+
+    @app.get("/terms")
+    def terms_of_service() -> str:
+        return render_template("terms.html", csrf_token=csrf_token(), year=date.today().year)
+
+    @app.get("/refund")
+    def refund_policy() -> str:
+        return render_template("refund.html", csrf_token=csrf_token(), year=date.today().year)
+
+    @app.get("/cookies")
+    def cookie_policy() -> str:
+        return render_template("cookies.html", csrf_token=csrf_token(), year=date.today().year)
+
+    @app.get("/faq")
+    def faq_page() -> str:
+        return render_template("faq.html", csrf_token=csrf_token(), year=date.today().year)
+
+    @app.errorhandler(404)
+    def not_found(error: Any) -> Any:
+        if request.path.startswith("/api/"):
+            return jsonify(error="Resource not found."), 404
+        return render_template("404.html", csrf_token=csrf_token(), year=date.today().year), 404
 
     @app.get("/api/session")
     def session_state() -> Any:
@@ -344,6 +430,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         name = str(body.get("name", "")).strip()
         email = str(body.get("email", "")).strip().lower()
         password = body.get("password", "")
+        utm = {
+            "source": str(body.get("utm_source", "") or request.args.get("utm_source", "")).strip().lower()[:64],
+            "medium": str(body.get("utm_medium", "") or request.args.get("utm_medium", "")).strip().lower()[:64],
+            "campaign": str(body.get("utm_campaign", "") or request.args.get("utm_campaign", "")).strip().lower()[:64],
+        }
         if not 2 <= len(name) <= 80:
             return jsonify(error="Enter your name using 2 to 80 characters."), 422
         if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
@@ -357,13 +448,17 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         ).hex()
         try:
             cursor = get_db().execute(
-                "INSERT INTO users (name, email, password_salt, password_hash, currency, created_at) "
-                "VALUES (?, ?, ?, ?, 'INR', ?)",
+                "INSERT INTO users (name, email, password_salt, password_hash, currency, "
+                "utm_source, utm_medium, utm_campaign, email_opt_out, created_at) "
+                "VALUES (?, ?, ?, ?, 'INR', ?, ?, ?, 0, ?)",
                 (
                     name,
                     email,
                     salt.hex(),
                     password_hash,
+                    utm["source"],
+                    utm["medium"],
+                    utm["campaign"],
                     utc_now().isoformat(timespec="seconds"),
                 ),
             )
@@ -382,6 +477,40 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             ),
             csrf_token=csrf_token(),
         ), 201
+
+    @app.post("/api/data-request")
+    @authenticated
+    def data_request() -> Any:
+        user_id = g.user["id"]
+        db = get_db()
+        db.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        db.commit()
+        session.clear()
+        return jsonify(ok=True, message="Your account and all stored data have been permanently deleted.")
+
+    @app.post("/api/unsubscribe")
+    def unsubscribe() -> Any:
+        email = str(json_body().get("email", "") or request.form.get("email", "") or "").strip().lower()
+        if not email or len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            return jsonify(error="Enter a valid email address."), 422
+        db = get_db()
+        db.execute("UPDATE users SET email_opt_out = 1 WHERE email = ?", (email,))
+        db.commit()
+        return jsonify(ok=True, message="You have been unsubscribed from non-essential emails.")
+
+    
+    @app.post("/api/data-request-public")
+    def public_data_request() -> Any:
+        """Public data deletion request by email address (no auth required)."""
+        email = str(json_body().get("email", "") or request.form.get("email", "") or "").strip().lower()
+        if not email or len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            return jsonify(error="Enter a valid email address."), 422
+        db = get_db()
+        db.execute("DELETE FROM transactions WHERE user_id = (SELECT id FROM users WHERE email = ?)", (email,))
+        db.execute("DELETE FROM users WHERE email = ?", (email,))
+        db.commit()
+        return jsonify(ok=True, message="If an account exists with that email, it has been scheduled for deletion.")
 
     @app.post("/api/auth/login")
     def login() -> Any:

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{ csrf_token }">
+    <meta name="theme-color" content="#030405">
+    <meta name="description" content="Acuwealth Cookie Policy — transparent explanation of our local storage and cookies.">
+    <title>Cookie Policy | Acuwealth</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23c6c9ce%22 stroke-width=%221.5%22><circle cx=%2212%22 cy=%2212%22 r=%229%22/><path d=%22M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z%22/></svg>">
+    <link rel="stylesheet" href="{ url_for('static', filename='styles.css') }">
+    <script src="{ url_for('static', filename='app.js') }" defer></script>
+  </head>
+  <body class="legal-page">
+    <a href="#content" class="skip-link">Skip to content</a>
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+    <header class="legal-nav liquid-glass">
+      <a class="landing-brand" href="/" aria-label="Acuwealth home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path>
+        </svg>
+        <span>Acuwealth</span>
+      </a>
+      <nav class="landing-links" aria-label="Main navigation">
+        <a href="/#features">Features</a>
+        <a href="/#currencies">Currencies</a>
+        <a href="/faq">FAQ</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+      <div class="landing-nav-actions">
+        <a class="landing-login-button liquid-glass" href="/">Open App</a>
+      </div>
+    </header>
+    <main id="content" class="legal-main">
+
+      <article class="legal-article">
+        <p class="landing-label">COOKIES &amp; PRIVACY</p>
+        <h1>Cookie Policy</h1>
+        <p class="legal-meta">Last updated: October 13, 2026 &bull; Effective date: October 13, 2026</p>
+
+        <section>
+          <h2>1. What Are Cookies?</h2>
+          <p>Cookies and browser storage are small text files or key-value entries stored on your device by websites you visit. They help sites remember your session and preferences.</p>
+        </section>
+
+        <section>
+          <h2>2. Cookies We Use</h2>
+          <p>We use only <strong>strictly necessary</strong> cookies and local storage items essential for the application to function:</p>
+          <table class="cookie-table">
+            <thead>
+              <tr>
+                <th>Identifier</th>
+                <th>Type</th>
+                <th>Purpose</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>session</code></td>
+                <td>HTTP cookie (HttpOnly, SameSite=Lax)</td>
+                <td>Stores your signed-in session state and CSRF token.</td>
+                <td>Session only</td>
+              </tr>
+              <tr>
+                <td><code>acuwealth-theme</code></td>
+                <td>localStorage</td>
+                <td>Remembers your light/dark mode preference.</td>
+                <td>Persistent</td>
+              </tr>
+              <tr>
+                <td><code>acuwealth-cookie-consent</code></td>
+                <td>localStorage</td>
+                <td>Remembers your cookie banner acknowledgement.</td>
+                <td>1 year</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>3. No Third-Party Tracking Cookies</h2>
+          <p>We do not use advertising cookies, remarketing beacons, or third-party tracking cookies. Your financial data is never shared with advertiser networks.</p>
+        </section>
+
+        <section>
+          <h2>4. Managing Your Preferences</h2>
+          <p>You can clear cookies and local storage at any time via your browser settings. You can also reset your cookie consent choice below:</p>
+          <button class="button button-quiet" id="resetCookieConsent" type="button">Reset Cookie Preferences</button>
+        </section>
+      </article>
+
+    </main>
+    <footer class="landing-footer legal-footer">
+      <a class="landing-brand" href="/" aria-label="Acuwealth home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+        <span>Acuwealth</span>
+      </a>
+      <div class="legal-footer-links">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/refund">Refund Policy</a>
+        <a href="/cookies">Cookie Policy</a>
+        <a href="/faq">FAQ</a>
+      </div>
+      <p>&copy; {{ year }} Acuwealth. Personal finance tracker. Free, open, private.</p>
+    </footer>
+    <button class="back-to-top" id="backToTop" type="button" aria-label="Back to top">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg>
+    </button>
+  </body>
+</html>

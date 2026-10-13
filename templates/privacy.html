@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{ csrf_token }">
+    <meta name="theme-color" content="#030405">
+    <meta name="description" content="Acuwealth Privacy Policy — how we protect your personal financial data.">
+    <title>Privacy Policy | Acuwealth</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23c6c9ce%22 stroke-width=%221.5%22><circle cx=%2212%22 cy=%2212%22 r=%229%22/><path d=%22M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z%22/></svg>">
+    <link rel="stylesheet" href="{ url_for('static', filename='styles.css') }">
+    <script src="{ url_for('static', filename='app.js') }" defer></script>
+  </head>
+  <body class="legal-page">
+    <a href="#content" class="skip-link">Skip to content</a>
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+    <header class="legal-nav liquid-glass">
+      <a class="landing-brand" href="/" aria-label="Acuwealth home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path>
+        </svg>
+        <span>Acuwealth</span>
+      </a>
+      <nav class="landing-links" aria-label="Main navigation">
+        <a href="/#features">Features</a>
+        <a href="/#currencies">Currencies</a>
+        <a href="/faq">FAQ</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+      <div class="landing-nav-actions">
+        <a class="landing-login-button liquid-glass" href="/">Open App</a>
+      </div>
+    </header>
+    <main id="content" class="legal-main">
+
+      <article class="legal-article">
+        <p class="landing-label">LEGAL &amp; PRIVACY</p>
+        <h1>Privacy Policy</h1>
+        <p class="legal-meta">Last updated: October 13, 2026 &bull; Effective date: October 13, 2026</p>
+
+        <section>
+          <h2>1. Overview</h2>
+          <p>Acuwealth ("we", "our", or "us") is committed to protecting your personal information. This Privacy Policy describes how we collect, use, and safeguard your data when you use the Acuwealth personal finance application.</p>
+        </section>
+
+        <section>
+          <h2>2. Data We Collect (And What We Don't)</h2>
+          <p>We believe in minimal data collection. We only collect data that is strictly necessary to provide the service:</p>
+          <ul>
+            <li><strong>Account data:</strong> Your name, email address, and a salted and hashed password (PBKDF2-HMAC-SHA256 with 310,000 iterations). We never store plaintext passwords.</li>
+            <li><strong>Financial activity:</strong> Income and expense transactions you explicitly record (description, amount, currency, category, and date).</li>
+            <li><strong>Preferences:</strong> Your preferred display currency.</li>
+            <li><strong>Marketing attribution:</strong> Optional UTM parameters (source, medium, campaign) if you arrived via a link.</li>
+          </ul>
+          <p><strong>We do NOT collect:</strong> Bank credentials, credit card numbers, location tracking, device telemetry, or children's personal data.</p>
+        </section>
+
+        <section>
+          <h2>3. Children's Privacy</h2>
+          <p>Acuwealth is not directed to individuals under the age of 16. We do not knowingly collect personal data from children. If you believe a child has provided us with personal information, please submit a deletion request and we will promptly remove it.</p>
+        </section>
+
+        <section>
+          <h2>4. Third-Party Services and SDKs</h2>
+          <p>We do not use advertising networks, social tracking pixels, or commercial analytics SDKs. The only third-party services we interact with are:</p>
+          <ul>
+            <li><strong>Exchange rates (open.er-api.com):</strong> Public exchange rate data is fetched by our server and cached locally. No user or account data is ever shared with the exchange rate provider.</li>
+            <li><strong>Google Fonts:</strong> Typography stylesheets (Instrument Serif). Only your browser's standard font request is made.</li>
+            <li><strong>Media CDN (CloudFront):</strong> Video demonstrations are hosted on a content delivery network. No cookies or personal identifiers are passed.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>5. Your Rights &amp; Data Deletion</h2>
+          <p>You have full ownership of your data. You may:</p>
+          <ul>
+            <li>View all of your stored transactions and account details at any time in the app.</li>
+            <li>Delete individual transactions instantly.</li>
+            <li>Request permanent deletion of your entire account and all associated transactions via our in-app Data Deletion tool or by submitting a request below.</li>
+            <li>Opt out of non-essential email notifications at any time.</li>
+          </ul>
+          <div class="data-deletion-box">
+            <h3>Need your data deleted?</h3>
+            <p>Signed-in users can delete their entire account and all associated financial records immediately from their Preferences page, or use the form below.</p>
+            <form id="publicDataRequestForm" class="legal-action-form">
+              <label class="field">
+                <span>Account email address</span>
+                <input type="email" name="email" id="dataRequestEmail" required placeholder="you@example.com">
+              </label>
+              <button class="button button-danger" type="submit">Request Data Deletion</button>
+            </form>
+            <p id="dataRequestStatus" class="form-feedback" role="status" hidden></p>
+          </div>
+        </section>
+
+        <section>
+          <h2>6. Contact Us</h2>
+          <p>For any questions regarding this Privacy Policy or your data, contact our Data Protection Officer:</p>
+          <p>Email: <a href="mailto:privacy@acuwealth.example.com">privacy@acuwealth.example.com</a><br>
+          Phone: <a href="tel:+18005550199">+1 (800) 555-0199</a></p>
+        </section>
+      </article>
+
+    </main>
+    <footer class="landing-footer legal-footer">
+      <a class="landing-brand" href="/" aria-label="Acuwealth home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+        <span>Acuwealth</span>
+      </a>
+      <div class="legal-footer-links">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/refund">Refund Policy</a>
+        <a href="/cookies">Cookie Policy</a>
+        <a href="/faq">FAQ</a>
+      </div>
+      <p>&copy; {{ year }} Acuwealth. Personal finance tracker. Free, open, private.</p>
+    </footer>
+    <button class="back-to-top" id="backToTop" type="button" aria-label="Back to top">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg>
+    </button>
+  </body>
+</html>

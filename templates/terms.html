@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{ csrf_token }">
+    <meta name="theme-color" content="#030405">
+    <meta name="description" content="Acuwealth Terms of Service — conditions of using our personal finance platform.">
+    <title>Terms of Service | Acuwealth</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23c6c9ce%22 stroke-width=%221.5%22><circle cx=%2212%22 cy=%2212%22 r=%229%22/><path d=%22M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z%22/></svg>">
+    <link rel="stylesheet" href="{ url_for('static', filename='styles.css') }">
+    <script src="{ url_for('static', filename='app.js') }" defer></script>
+  </head>
+  <body class="legal-page">
+    <a href="#content" class="skip-link">Skip to content</a>
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+    <header class="legal-nav liquid-glass">
+      <a class="landing-brand" href="/" aria-label="Acuwealth home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path>
+        </svg>
+        <span>Acuwealth</span>
+      </a>
+      <nav class="landing-links" aria-label="Main navigation">
+        <a href="/#features">Features</a>
+        <a href="/#currencies">Currencies</a>
+        <a href="/faq">FAQ</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+      <div class="landing-nav-actions">
+        <a class="landing-login-button liquid-glass" href="/">Open App</a>
+      </div>
+    </header>
+    <main id="content" class="legal-main">
+
+      <article class="legal-article">
+        <p class="landing-label">LEGAL &amp; POLICIES</p>
+        <h1>Terms of Service</h1>
+        <p class="legal-meta">Last updated: October 13, 2026 &bull; Effective date: October 13, 2026</p>
+
+        <section>
+          <h2>1. Agreement to Terms</h2>
+          <p>By accessing or using Acuwealth, you agree to be bound by these Terms of Service. If you do not agree to these terms, do not access or use our services.</p>
+        </section>
+
+        <section>
+          <h2>2. Description of Service</h2>
+          <p>Acuwealth is a personal finance tracker designed to help you record income and expenses, organize cash flow by category, and review your finances in your chosen currency. Acuwealth is currently provided completely free of charge.</p>
+        </section>
+
+        <section>
+          <h2>3. No Financial, Legal, or Tax Advice</h2>
+          <p>Acuwealth is a self-directed organizational tool. Nothing provided by Acuwealth constitutes financial, investment, tax, or legal advice. Exchange rates are provided for informational convenience and should not be relied upon for mission-critical currency trading.</p>
+        </section>
+
+        <section>
+          <h2>4. User Responsibilities</h2>
+          <p>You agree to:</p>
+          <ul>
+            <li>Provide accurate account information and keep your credentials secure.</li>
+            <li>Maintain a strong password with at least 10 characters.</li>
+            <li>Use the service solely for lawful personal finance tracking purposes.</li>
+            <li>Not attempt to exploit, reverse engineer, or disrupt the platform or its APIs.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>5. Transparent Practices (No Dark Patterns)</h2>
+          <p>We are committed to honest software engineering. Acuwealth promises:</p>
+          <ul>
+            <li>No hidden fees or surprise subscriptions.</li>
+            <li>No fake reviews, fabricated testimonials, or unverified claims.</li>
+            <li>No pre-checked consents or manipulative interface patterns.</li>
+            <li>Easy, one-click export or permanent deletion of your account.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>6. Termination</h2>
+          <p>You may stop using Acuwealth and delete your account at any time. We reserve the right to suspend or terminate accounts that violate these terms or abuse system resources.</p>
+        </section>
+
+        <section>
+          <h2>7. Contact</h2>
+          <p>Questions about the Terms of Service should be sent to <a href="mailto:support@acuwealth.example.com">support@acuwealth.example.com</a>.</p>
+        </section>
+      </article>
+
+    </main>
+    <footer class="landing-footer legal-footer">
+      <a class="landing-brand" href="/" aria-label="Acuwealth home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+        <span>Acuwealth</span>
+      </a>
+      <div class="legal-footer-links">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/refund">Refund Policy</a>
+        <a href="/cookies">Cookie Policy</a>
+        <a href="/faq">FAQ</a>
+      </div>
+      <p>&copy; {{ year }} Acuwealth. Personal finance tracker. Free, open, private.</p>
+    </footer>
+    <button class="back-to-top" id="backToTop" type="button" aria-label="Back to top">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg>
+    </button>
+  </body>
+</html>

@@ -5,11 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="theme-color" content="#030405">
-    <title>Acuwealth | Personal finance</title>
+    <meta name="description" content="Track income and expenses, organize cash flow by category, and review your personal finances across multiple currencies with live exchange rates. Free, private, and secure.">
+    <title>Acuwealth | Smart Personal Finance & Multi-Currency Tracker</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23c6c9ce%22 stroke-width=%221.5%22><circle cx=%2212%22 cy=%2212%22 r=%229%22/><path d=%22M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z%22/></svg>">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </head>
   <body>
+    <a href="#landingHeadline" class="skip-link">Skip to main content</a>
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+    <div class="offline-banner" id="offlineBanner" role="status" aria-live="assertive" hidden>
+      <span>You are currently offline. Actions requiring a server connection are paused until you reconnect.</span>
+    </div>
     <main class="landing-page" id="landingPage">
       <section class="landing-hero" id="home" aria-labelledby="landingHeadline">
         <video
@@ -39,8 +46,28 @@
           <div class="landing-nav-actions">
             <button class="landing-signup-link" type="button" data-open-auth="signup">Sign up</button>
             <button class="landing-login-button liquid-glass" type="button" data-open-auth="login">Log in</button>
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mobileDrawer">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path class="icon-open" d="M4 6h16M4 12h16M4 18h16"></path>
+                <path class="icon-close" d="M6 6l12 12M6 18L18 6" style="display:none;"></path>
+              </svg>
+            </button>
           </div>
         </header>
+        <div class="mobile-drawer" id="mobileDrawer" hidden aria-label="Mobile navigation">
+          <nav class="mobile-drawer-links">
+            <a href="#features" class="mobile-drawer-link">Features</a>
+            <a href="#currencies" class="mobile-drawer-link">Currencies</a>
+            <a href="#about" class="mobile-drawer-link">About</a>
+            <a href="/faq" class="mobile-drawer-link">FAQ</a>
+            <a href="/privacy" class="mobile-drawer-link">Privacy Policy</a>
+            <a href="/terms" class="mobile-drawer-link">Terms of Service</a>
+          </nav>
+          <div class="mobile-drawer-actions">
+            <button class="button button-primary button-wide" type="button" data-open-auth="signup">Sign up free</button>
+            <button class="button button-quiet button-wide" type="button" data-open-auth="login">Log in</button>
+          </div>
+        </div>
 
         <div class="landing-hero-content">
           <p class="landing-eyebrow">A clearer way to see your money</p>
@@ -163,13 +190,38 @@
         </div>
       </section>
 
-      <footer class="landing-footer">
-        <a class="landing-brand" href="#home" aria-label="Acuwealth home">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
-          <span>Acuwealth</span>
-        </a>
-        <p>Income, expenses, cash flow, and currency in one clear view.</p>
-        <button type="button" data-open-auth="login">Log in</button>
+      <footer class="landing-footer expanded-footer">
+        <div class="landing-footer-main">
+          <div class="landing-footer-brand-col">
+            <a class="landing-brand" href="#home" aria-label="Acuwealth home">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>
+              <span>Acuwealth</span>
+            </a>
+            <p class="landing-footer-tagline">Income, expenses, cash flow, and multi-currency tracking in one private view.</p>
+            <p class="landing-contact-info">
+              Contact: <a href="mailto:support@acuwealth.example.com">support@acuwealth.example.com</a> &bull;
+              <a href="tel:+18005550199">+1 (800) 555-0199</a>
+            </p>
+          </div>
+          <div class="landing-footer-links-col">
+            <strong>Platform</strong>
+            <a href="#features">Features</a>
+            <a href="#currencies">Currencies</a>
+            <a href="#about">About</a>
+            <a href="/faq">FAQ</a>
+          </div>
+          <div class="landing-footer-links-col">
+            <strong>Legal &amp; Privacy</strong>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/refund">Refund Policy</a>
+            <a href="/cookies">Cookie Policy</a>
+          </div>
+        </div>
+        <div class="landing-footer-bottom">
+          <p>&copy; {{ year }} Acuwealth. All rights reserved. Free, private personal finance.</p>
+          <button type="button" data-open-auth="login">Log in</button>
+        </div>
       </footer>
     </main>
 
@@ -229,7 +281,13 @@
             </label>
             <label class="field">
               <span>Password</span>
-              <input type="password" name="password" autocomplete="current-password" minlength="10" maxlength="128" required data-smooth-input data-animated-input>
+              <div class="password-input-wrap">
+                <input type="password" name="password" id="authPasswordInput" autocomplete="current-password" minlength="10" maxlength="128" required data-smooth-input data-animated-input>
+                <button type="button" class="password-toggle-btn" id="passwordToggleBtn" aria-label="Show password" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" fill="none" class="eye-open" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  <svg viewBox="0 0 24 24" fill="none" class="eye-closed" aria-hidden="true" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                </button>
+              </div>
               <span class="password-strength" id="passwordStrength" hidden>
                 <span class="password-strength-heading">
                   <span>Password strength</span>
@@ -454,6 +512,12 @@
                 <button class="button button-primary" type="submit">Save preference</button>
             </form>
             <p class="settings-rate" id="settingsRateStatus"></p>
+
+            <section class="settings-danger">
+              <h2>Danger zone</h2>
+              <p>Permanently delete your account and every transaction you have recorded. This action cannot be undone.</p>
+              <button class="button button-danger" type="button" id="deleteAccountButton">Delete my account and all data</button>
+            </section>
           </section>
 
         </div>
@@ -505,5 +569,32 @@
       </form>
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <div class="cookie-banner" id="cookieBanner" role="dialog" aria-label="Cookie consent" aria-modal="false" hidden>
+      <div class="cookie-banner-content">
+        <h3 class="cookie-banner-title">We use cookies and local storage</h3>
+        <p class="cookie-banner-text">Acuwealth uses only strictly necessary cookies and local storage to remember your session, theme, and consent choice. We do not use advertising or tracking cookies, and we never sell your data.</p>
+        <div class="cookie-banner-actions">
+          <button class="button button-primary" type="button" id="cookieAccept">Accept essential cookies</button>
+          <button class="button button-quiet" type="button" id="cookieReject">Reject non-essential</button>
+          <button class="text-button" type="button" id="cookieManage">Manage</button>
+        </div>
+      </div>
+    </div>
+
+    <dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle">
+      <form class="confirm-dialog-form" id="confirmForm">
+        <h2 class="confirm-title" id="confirmTitle">Confirm action</h2>
+        <p class="confirm-message" id="confirmMessage">Are you sure you want to continue?</p>
+        <div class="confirm-actions">
+          <button class="button button-quiet" type="button" id="confirmCancel">Cancel</button>
+          <button class="button button-danger" type="submit" id="confirmConfirm">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+
+    <button class="back-to-top" id="backToTop" type="button" aria-label="Back to top">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg>
+    </button>
   </body>
 </html>

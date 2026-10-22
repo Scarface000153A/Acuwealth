@@ -280,9 +280,99 @@ def parse_sms_email_text(text: str) -> list[dict]:
     return transactions
 
 
+def parse_paytm_screenshot(text: str) -> list[dict]:
+    """Parse Paytm Payment History screenshot format specifically."""
+    transactions = []
+    
+    # Paytm screenshot pattern: Name, Date, Amount, Category
+    # Example: "Shishupal\n15 Oct, 05:56 PM\n- ₹10\nFuel"
+    # Or: "Vansh New\n15 Oct, 05:54 PM\n+ ₹50\nMoney Received"
+    
+    # Split into blocks by looking for amount lines
+    lines = text.split('\n')
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        # Look for amount pattern (with + or - sign)
+        amount_match = re.match(r'^([+-])\s*(?:₹|Rs\.?\s*)?([\d,]+\.?\d*)$', line)
+        if amount_match:
+            sign = amount_match.group(1)
+            amount = clean_amount(amount_match.group(2))
+            
+            # Look backward for name and date
+            name = ''
+            date_str = ''
+            category = ''
+            
+            # Check previous lines for name and date
+            for j in range(i-1, max(i-4, -1), -1):
+                prev_line = lines[j].strip()
+                if not prev_line:
+                    continue
+                
+                # Check for date pattern
+                date_match = re.search(r'(\d{1,2}\s+\w{3},?\s+\d{1,2}:\d{2}\s*(?:AM|PM))', prev_line, re.IGNORECASE)
+                if date_match:
+                    date_str = date_match.group(1)
+                    continue
+                
+                # Check for category
+                cat_match = re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received)', prev_line, re.IGNORECASE)
+                if cat_match:
+                    category = cat_match.group(1)
+                    continue
+                
+                # If it's a name (not a date, not an amount, not a category)
+                if not name and not date_match and not cat_match and len(prev_line) > 2 and not prev_line.startswith('-') and not prev_line.startswith('+'):
+                    name = prev_line
+            
+            # Check next line for category
+            if i + 1 < len(lines):
+                next_line = lines[i+1].strip()
+                cat_match = re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received)', next_line, re.IGNORECASE)
+                if cat_match:
+                    category = cat_match.group(1)
+            
+            if amount and date_str:
+                # Determine kind
+                if sign == '+' or 'money received' in category.lower() or 'received' in category.lower():
+                    kind = 'income'
+                else:
+                    kind = 'expense'
+                
+                # Normalize date
+                normalized_date = normalize_date(date_str.replace(',', ''))
+                
+                # Auto-categorize
+                if not category:
+                    category = categorize_transaction(name)
+                
+                transactions.append({
+                    'date': normalized_date,
+                    'amount': amount,
+                    'description': name or 'Unknown',
+                    'kind': kind,
+                    'category': category,
+                })
+        
+        i += 1
+    
+    return transactions
+
+
 def parse_raw_text(text: str) -> list[dict]:
     """Parse any raw text (OCR output, copied text, etc.) for transactions."""
     transactions = []
+    
+    # Clean and simplify OCR text (Tesseract can sometimes add artifacts)
+    text = re.sub(r'[^\x00-\x7F]+', ' ', text) # Remove non-ascii
+    
+    # First try Paytm-specific parser
+    paytm_transactions = parse_paytm_screenshot(text)
+    if paytm_transactions:
+        return paytm_transactions
     
     # Split into lines and process each
     lines = text.split('\n')
@@ -360,11 +450,16 @@ def normalize_date(date_str: str) -> Optional[str]:
         '%m/%d/%Y', '%m-%d-%Y', '%m/%d/%y', '%m-%d-%y',
         '%Y/%m/%d', '%Y-%m-%d', '%y/%m/%d', '%y-%m-%d',
         '%d %b %Y', '%d %B %Y', '%b %d %Y', '%B %d %Y',
+        '%d %b', # e.g., 15 Oct
     ]
     
     for fmt in formats:
         try:
-            parsed = datetime.strptime(date_str, fmt)
+            # If format doesn't have year, assume current year
+            if '%Y' not in fmt and '%y' not in fmt:
+                parsed = datetime.strptime(date_str + ' ' + str(datetime.now().year), fmt + ' %Y')
+            else:
+                parsed = datetime.strptime(date_str, fmt)
             return parsed.strftime('%Y-%m-%d')
         except ValueError:
             continue

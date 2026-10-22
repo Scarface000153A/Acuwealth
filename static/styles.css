@@ -5547,6 +5547,46 @@ a[href^="tel:"]:hover {
   box-shadow: var(--shadow);
 }
 
+.qr-code-container {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 200px;
+  overflow: hidden;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-sizing: border-box;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.qr-code-container img {
+  width: 100%;
+  height: 100%;
+  max-width: 184px;
+  max-height: 184px;
+  border-radius: 4px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.qr-code-container .import-hint {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  flex-shrink: 0;
+}
+
 .import-method-icon {
   font-size: 36px;
   margin-bottom: 16px;

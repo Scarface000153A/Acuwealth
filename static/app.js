@@ -1227,6 +1227,9 @@
   }
 
   document.getElementById("addTransactionButton").addEventListener("click", openTransactionDialog);
+  document.getElementById("importButton")?.addEventListener("click", () => {
+    window.location.href = "/import";
+  });
   document.getElementById("closeTransactionDialog").addEventListener("click", () => transactionDialog.close());
   document.getElementById("cancelTransaction").addEventListener("click", () => transactionDialog.close());
   for (const button of document.querySelectorAll(".theme-toggle")) {

@@ -5115,3 +5115,364 @@ a[href^="tel:"]:hover {
     height: 20px;
   }
 }
+
+/* ========== PREDICTIONS VIEW ========== */
+
+.predictions-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1000px) {
+  .predictions-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .predictions-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+.prediction-stat-card {
+  min-height: 130px;
+  padding: 20px 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.prediction-stat-card.loading {
+  background: var(--surface-subtle);
+}
+
+.prediction-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.prediction-stat-label {
+  font-size: 11px;
+}
+
+.prediction-stat-mark {
+  display: grid;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 6px;
+  place-items: center;
+  border-radius: 7px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.prediction-stat-value {
+  margin: 16px 0 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.2;
+}
+
+.prediction-stat-value.expense-text {
+  color: var(--negative);
+}
+
+.predictions-chart-panel {
+  margin-bottom: 24px;
+}
+
+.prediction-month {
+  position: relative;
+}
+
+.prediction-bars {
+  position: relative;
+  min-height: 150px;
+  padding-top: 24px;
+}
+
+.prediction-confidence-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--accent-soft);
+  border-radius: 4px 4px 0 0;
+  opacity: 0.4;
+  transition: opacity 200ms ease;
+}
+
+.prediction-month:hover .prediction-confidence-band {
+  opacity: 0.6;
+}
+
+.confidence-label {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: var(--muted);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.prediction-month:hover .confidence-label {
+  opacity: 1;
+}
+
+.chart-bar-prediction {
+  background: var(--negative);
+  width: min(17px, 38%);
+}
+
+.prediction-value-label {
+  display: block;
+  margin-top: 8px;
+  color: var(--ink-soft);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.prediction-month.current-month .prediction-value-label {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.predictions-table-panel {
+  margin-bottom: 24px;
+}
+
+#predictionsTable td {
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+#predictionsTable td:first-child,
+#predictionsTable th:first-child {
+  padding-left: 0;
+}
+
+#predictionsTable td:last-child,
+#predictionsTable th:last-child {
+  padding-right: 0;
+}
+
+#predictionsTable tr.current-month {
+  background: var(--accent-soft);
+}
+
+#predictionsTable tr.current-month td {
+  color: var(--ink);
+}
+
+.confidence-badge {
+  display: inline-block;
+  min-width: 52px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 9px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.confidence-high {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.confidence-medium {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.confidence-low {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.seasonal-panel {
+  margin-bottom: 24px;
+}
+
+.seasonal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1000px) {
+  .seasonal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .seasonal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.seasonal-card {
+  padding: 20px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  text-align: center;
+}
+
+.seasonal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.seasonal-icon {
+  font-size: 18px;
+}
+
+.seasonal-card-header h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.seasonal-value {
+  margin: 8px 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.seasonal-value.expense-text {
+  color: var(--negative);
+}
+
+.seasonal-value.trend-increasing {
+  color: var(--negative);
+}
+
+.seasonal-value.trend-decreasing {
+  color: var(--positive);
+}
+
+.seasonal-value.trend-stable {
+  color: var(--accent-strong);
+}
+
+.seasonal-description {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.recommendations-panel {
+  margin-bottom: 24px;
+}
+
+.recommendations-list {
+  display: grid;
+  gap: 12px;
+}
+
+.recommendation-card {
+  display: flex;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.recommendation-number {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.recommendation-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.recommendation-content p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.seasonal-empty,
+.recommendations-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+
+.seasonal-hint,
+.recommendation-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Dark mode adjustments */
+:root[data-theme="dark"] .prediction-stat-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .seasonal-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .recommendation-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+/* Light mode adjustments */
+:root[data-theme="light"] .prediction-stat-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+:root[data-theme="light"] .seasonal-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+:root[data-theme="light"] .recommendation-card {
+  background: var(--surface);
+  border-color: var(--line);
+}

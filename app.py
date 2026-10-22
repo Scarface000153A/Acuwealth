@@ -20,6 +20,14 @@ import psycopg
 from psycopg.rows import dict_row
 from flask import Flask, g, jsonify, render_template, request, session
 
+# Import prediction service
+try:
+    from prediction_service import predict_expenses
+    PREDICTION_AVAILABLE = True
+except ImportError:
+    PREDICTION_AVAILABLE = False
+    predict_expenses = None
+
 
 ROOT = Path(__file__).resolve().parent
 PASSWORD_ITERATIONS = 310_000
@@ -973,6 +981,71 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 for code, (name, symbol) in SUPPORTED_CURRENCIES.items()
             ],
         )
+
+    @app.get("/api/predictions")
+    @authenticated
+    def predictions() -> Any:
+        if not PREDICTION_AVAILABLE:
+            return jsonify(
+                error="Prediction service is not available. Please install required ML dependencies."
+            ), 503
+
+        db = get_db()
+        user_id = g.user["id"]
+        base = g.user["currency"]
+
+        # Get all user transactions (expenses)
+        all_transactions = db.execute(
+            "SELECT kind, category, description, amount_cents, currency, occurred_on "
+            "FROM transactions WHERE user_id = ? AND kind = 'expense' "
+            "ORDER BY occurred_on",
+            (user_id,),
+        ).fetchall()
+
+        if not all_transactions:
+            return jsonify(
+                predictions={
+                    "monthly_breakdown": [],
+                    "recommendations": [
+                        "Add expense transactions to get personalized predictions for future months."
+                    ],
+                    "metadata": {
+                        "total_expenses": 0,
+                        "expense_count": 0,
+                        "error": "No expense transactions found"
+                    }
+                }
+            )
+
+        # Convert to prediction format
+        transactions_for_prediction = []
+        for row in all_transactions:
+            amount_str = cents_to_amount(row["amount_cents"])
+            transactions_for_prediction.append({
+                "kind": row["kind"],
+                "category": row["category"],
+                "description": row["description"],
+                "amount": amount_str,
+                "currency": row["currency"],
+                "occurred_on": row["occurred_on"]
+            })
+
+        # Generate predictions
+        try:
+            prediction_result = predict_expenses(
+                transactions_for_prediction,
+                base,
+                months_ahead=12
+            )
+            
+            # Add currency info for frontend formatting
+            prediction_result["currency"] = base
+            
+            return jsonify(predictions=prediction_result)
+        except Exception as exc:
+            return jsonify(
+                error=f"Prediction failed: {str(exc)}"
+            ), 500
 
     return app
 

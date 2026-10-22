@@ -720,10 +720,284 @@
     }
   }
 
+  async function loadPredictions() {
+    const summaryEl = document.getElementById("predictionsSummary");
+    const chartEl = document.getElementById("predictionsChart");
+    const tableBody = document.getElementById("predictionsTable");
+    const seasonalGrid = document.getElementById("seasonalGrid");
+    const recommendationsList = document.getElementById("recommendationsList");
+    
+    // Show loading states
+    summaryEl.innerHTML = `
+      <article class="prediction-stat-card loading">
+        <div class="prediction-stat-header"><span>Avg. Monthly Expense</span><span>AVG</span></div>
+        <p class="prediction-stat-value">Loading…</p>
+      </article>
+      <article class="prediction-stat-card loading">
+        <div class="prediction-stat-header"><span>Next Month</span><span>NEXT</span></div>
+        <p class="prediction-stat-value">Loading…</p>
+      </article>
+      <article class="prediction-stat-card loading">
+        <div class="prediction-stat-header"><span>3-Month Total</span><span>3M</span></div>
+        <p class="prediction-stat-value">Loading…</p>
+      </article>
+      <article class="prediction-stat-card loading">
+        <div class="prediction-stat-header"><span>Yearly Projection</span><span>12M</span></div>
+        <p class="prediction-stat-value">Loading…</p>
+      </article>
+    `;
+    chartEl.innerHTML = '<p class="chart-empty">Loading predictions…</p>';
+    tableBody.innerHTML = '<tr><td colspan="4" class="table-empty">Loading…</td></tr>';
+    seasonalGrid.innerHTML = '<p class="table-empty">Loading…</p>';
+    recommendationsList.innerHTML = '<p class="table-empty">Loading…</p>';
+
+    try {
+      const data = await api("/api/predictions");
+      const predictions = data.predictions;
+      
+      // Populate currency select
+      const currencySelect = document.getElementById("predictionsCurrency");
+      if (currencySelect) {
+        currencySelect.innerHTML = state.currencies.map(({ code, name }) =>
+          `<option value="${escapeHTML(code)}"${code === predictions.currency ? " selected" : ""}>${escapeHTML(code)} - ${escapeHTML(name)}</option>`
+        ).join("");
+        currencySelect.value = predictions.currency;
+      }
+
+      // Render all sections
+      renderPredictionsSummary(predictions);
+      renderPredictionsChart(predictions);
+      renderPredictionsTable(predictions);
+      renderSeasonalPatterns(predictions);
+      renderRecommendations(predictions);
+    } catch (error) {
+      summaryEl.innerHTML = `
+        <article class="prediction-stat-card">
+          <div class="prediction-stat-header"><span>Error</span><span>ERR</span></div>
+          <p class="prediction-stat-value expense-text">Failed to load</p>
+        </article>
+      `;
+      chartEl.innerHTML = `<p class="chart-chart-unavailable">${escapeHTML(error.message)}</p>`;
+      tableBody.innerHTML = `<tr><td colspan="4" class="table-empty">${escapeHTML(error.message)}</td></tr>`;
+      if (error.status === 401) showAuth();
+    }
+  }
+
+  function renderPredictionsSummary(predictions) {
+    const summaryEl = document.getElementById("predictionsSummary");
+    const monthly = predictions.monthly_breakdown || [];
+    
+    if (!monthly.length) {
+      summaryEl.innerHTML = `
+        <article class="prediction-stat-card">
+          <div class="prediction-stat-header"><span>Avg. Monthly Expense</span><span>AVG</span></div>
+          <p class="prediction-stat-value">Not available</p>
+        </article>
+        <article class="prediction-stat-card">
+          <div class="prediction-stat-header"><span>Next Month</span><span>NEXT</span></div>
+          <p class="prediction-stat-value">Not available</p>
+        </article>
+        <article class="prediction-stat-card">
+          <div class="prediction-stat-header"><span>3-Month Total</span><span>3M</span></div>
+          <p class="prediction-stat-value">Not available</p>
+        </article>
+        <article class="prediction-stat-card">
+          <div class="prediction-stat-header"><span>Yearly Projection</span><span>12M</span></div>
+          <p class="prediction-stat-value">Not available</p>
+        </article>
+      `;
+      return;
+    }
+
+    const currency = predictions.currency || state.user?.currency || "INR";
+    const nextMonth = monthly[0]?.predicted_amount || 0;
+    const threeMonthTotal = monthly.slice(0, 3).reduce((sum, m) => sum + m.predicted_amount, 0);
+    const yearlyTotal = monthly.reduce((sum, m) => sum + m.predicted_amount, 0);
+    const avgMonthly = yearlyTotal / monthly.length;
+
+    summaryEl.innerHTML = `
+      <article class="prediction-stat-card">
+        <div class="prediction-stat-header">
+          <span class="prediction-stat-label">Avg. Monthly Expense</span>
+          <span class="prediction-stat-mark">AVG</span>
+        </div>
+        <p class="prediction-stat-value expense-text">${formatMoney(avgMonthly, currency)}</p>
+      </article>
+      <article class="prediction-stat-card">
+        <div class="prediction-stat-header">
+          <span class="prediction-stat-label">Next Month</span>
+          <span class="prediction-stat-mark">NEXT</span>
+        </div>
+        <p class="prediction-stat-value expense-text">${formatMoney(nextMonth, currency)}</p>
+      </article>
+      <article class="prediction-stat-card">
+        <div class="prediction-stat-header">
+          <span class="prediction-stat-label">3-Month Total</span>
+          <span class="prediction-stat-mark">3M</span>
+        </div>
+        <p class="prediction-stat-value expense-text">${formatMoney(threeMonthTotal, currency)}</p>
+      </article>
+      <article class="prediction-stat-card">
+        <div class="prediction-stat-header">
+          <span class="prediction-stat-label">Yearly Projection</span>
+          <span class="prediction-stat-mark">12M</span>
+        </div>
+        <p class="prediction-stat-value expense-text">${formatMoney(yearlyTotal, currency)}</p>
+      </article>
+    `;
+  }
+
+  function renderPredictionsChart(predictions) {
+    const chart = document.getElementById("predictionsChart");
+    const monthly = predictions.monthly_breakdown || [];
+    const currency = predictions.currency || state.user?.currency || "INR";
+    
+    if (!monthly.length) {
+      chart.innerHTML = '<p class="chart-empty">Add expense transactions to see predictions.</p>';
+      return;
+    }
+
+    // Prepare data for chart
+    const actualMonths = 6; // We'll show last 6 months of actual data if available
+    const maxValue = Math.max(...monthly.map(m => m.predicted_amount));
+    const minValue = Math.min(...monthly.map(m => m.lower_bound || m.predicted_amount));
+    const range = maxValue - minValue || 1;
+    
+    chart.setAttribute(
+      "aria-label",
+      `12-month expense prediction chart. ${monthly.map(
+        (m) => `${m.month}: predicted ${formatMoney(m.predicted_amount)}, range ${formatMoney(m.lower_bound)}–${formatMoney(m.upper_bound)}`
+      ).join(". ")}.`
+    );
+
+    chart.innerHTML = monthly.map((month, index) => {
+      // Normalize for chart height
+      const predHeight = Math.max(5, ((month.predicted_amount - minValue) / range) * 100);
+      const lowerHeight = Math.max(0, ((month.lower_bound - minValue) / range) * 100);
+      const upperHeight = Math.min(100, ((month.upper_bound - minValue) / range) * 100);
+      
+      const isCurrentOrPast = index < 0; // All are future in our case
+      
+      return `
+        <div class="chart-month prediction-month" data-month="${month.month}">
+          <div class="chart-bars prediction-bars">
+            <div class="prediction-confidence-band" style="bottom: ${lowerHeight}%; height: ${upperHeight - lowerHeight}%;">
+              <span class="confidence-label" aria-hidden="true">${formatMoney(month.lower_bound)}–${formatMoney(month.upper_bound)}</span>
+            </div>
+            <span class="chart-bar chart-bar-prediction" style="height:${predHeight}%" 
+              title="Predicted: ${escapeHTML(formatMoney(month.predicted_amount, currency))} (${month.confidence}% confidence)"></span>
+          </div>
+          <span class="chart-month-label">${escapeHTML(month.date)}</span>
+          <span class="prediction-value-label">${escapeHTML(formatMoney(month.predicted_amount, currency))}</span>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderPredictionsTable(predictions) {
+    const tableBody = document.getElementById("predictionsTable");
+    const monthly = predictions.monthly_breakdown || [];
+    const currency = predictions.currency || state.user?.currency || "INR";
+    
+    if (!monthly.length) {
+      tableBody.innerHTML = '<tr><td colspan="4" class="table-empty">No predictions available. Add expense transactions to generate forecasts.</td></tr>';
+      return;
+    }
+
+    tableBody.innerHTML = monthly.map((month, index) => `
+      <tr${index === 0 ? ' class="current-month"' : ''}>
+        <td>${escapeHTML(month.date)}</td>
+        <td class="amount-column expense-text">${escapeHTML(formatMoney(month.predicted_amount, currency))}</td>
+        <td>${escapeHTML(formatMoney(month.lower_bound, currency))} – ${escapeHTML(formatMoney(month.upper_bound, currency))}</td>
+        <td><span class="confidence-badge confidence-${month.confidence >= 80 ? 'high' : month.confidence >= 60 ? 'medium' : 'low'}">${month.confidence}%</span></td>
+      </tr>
+    `).join("");
+  }
+
+  function renderSeasonalPatterns(predictions) {
+    const seasonalGrid = document.getElementById("seasonalGrid");
+    const seasonal = predictions.seasonal_factors || {};
+    
+    if (!seasonal || Object.keys(seasonal).length === 0) {
+      seasonalGrid.innerHTML = `
+        <div class="seasonal-empty">
+          <p>Seasonal analysis requires at least 12 months of expense data.</p>
+          <p class="seasonal-hint">Keep tracking your expenses to unlock seasonal insights.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const peakMonth = seasonal.peak_month_label || "Unknown";
+    const lowestMonth = seasonal.lowest_month_label || "Unknown";
+    const averageMonth = seasonal.average_month || 0;
+    const trend = seasonal.trend || "stable";
+
+    seasonalGrid.innerHTML = `
+      <div class="seasonal-card">
+        <div class="seasonal-card-header">
+          <span class="seasonal-icon">📈</span>
+          <h3>Peak Spending</h3>
+        </div>
+        <p class="seasonal-value">${escapeHTML(peakMonth)}</p>
+        <p class="seasonal-description">Typically your highest expense month</p>
+      </div>
+      <div class="seasonal-card">
+        <div class="seasonal-card-header">
+          <span class="seasonal-icon">📉</span>
+          <h3>Lowest Spending</h3>
+        </div>
+        <p class="seasonal-value">${escapeHTML(lowestMonth)}</p>
+        <p class="seasonal-description">Typically your lowest expense month</p>
+      </div>
+      <div class="seasonal-card">
+        <div class="seasonal-card-header">
+          <span class="seasonal-icon">📊</span>
+          <h3>Monthly Average</h3>
+        </div>
+        <p class="seasonal-value expense-text">${escapeHTML(formatMoney(averageMonth))}</p>
+        <p class="seasonal-description">Average across all months</p>
+      </div>
+      <div class="seasonal-card">
+        <div class="seasonal-card-header">
+          <span class="seasonal-icon">${trend === 'increasing' ? '📈' : '📉'}</span>
+          <h3>Overall Trend</h3>
+        </div>
+        <p class="seasonal-value trend-${trend}">${escapeHTML(trend)}</p>
+        <p class="seasonal-description">Expense trajectory over time</p>
+      </div>
+    `;
+  }
+
+  function renderRecommendations(predictions) {
+    const recommendationsList = document.getElementById("recommendationsList");
+    const recommendations = predictions.recommendations || [];
+    
+    if (!recommendations.length) {
+      recommendationsList.innerHTML = `
+        <div class="recommendations-empty">
+          <p>No specific recommendations available yet.</p>
+          <p class="recommendation-hint">Add more transactions to get personalized savings advice.</p>
+        </div>
+      `;
+      return;
+    }
+
+    recommendationsList.innerHTML = recommendations.map((rec, index) => `
+      <article class="recommendation-card">
+        <div class="recommendation-number">${index + 1}</div>
+        <div class="recommendation-content">
+          <p>${escapeHTML(rec)}</p>
+        </div>
+      </article>
+    `).join("");
+  }
+
   function setView(view) {
     const headings = {
       overview: "Overview",
       transactions: "Transactions",
+      predictions: "Predictions",
       settings: "Preferences",
     };
     if (!headings[view]) return;
@@ -739,12 +1013,14 @@
     for (const [name, id] of Object.entries({
       overview: "overviewView",
       transactions: "transactionsView",
+      predictions: "predictionsView",
       settings: "settingsView",
     })) {
       document.getElementById(id).hidden = name !== view;
     }
     document.getElementById("breadcrumb").textContent = headings[view];
     if (view === "transactions") loadTransactions();
+    if (view === "predictions") loadPredictions();
   }
 
   function updateCategoryOptions() {

@@ -328,6 +328,10 @@
             <span class="nav-indicator" aria-hidden="true"></span>
             Transactions
           </button>
+          <button class="nav-link" type="button" data-view="predictions">
+            <span class="nav-indicator" aria-hidden="true"></span>
+            Predictions
+          </button>
           <button class="nav-link" type="button" data-view="settings">
             <span class="nav-indicator" aria-hidden="true"></span>
             Preferences
@@ -517,6 +521,102 @@
               <h2>Danger zone</h2>
               <p>Permanently delete your account and every transaction you have recorded. This action cannot be undone.</p>
               <button class="button button-danger" type="button" id="deleteAccountButton">Delete my account and all data</button>
+            </section>
+          </section>
+
+          <section class="page-view" id="predictionsView" hidden>
+            <div class="page-heading">
+              <div>
+                <h1>Future expense predictions.</h1>
+                <p class="page-subtitle">ML-powered forecasts to help you plan and save smarter.</p>
+              </div>
+              <div class="currency-control">
+                <label for="predictionsCurrency">Viewing in</label>
+                <select id="predictionsCurrency" aria-label="Predictions display currency"></select>
+              </div>
+            </div>
+
+            <div class="predictions-summary" id="predictionsSummary" role="status" aria-live="polite">
+              <article class="prediction-stat-card">
+                <div class="prediction-stat-header">
+                  <span class="prediction-stat-label">Avg. Monthly Expense</span>
+                  <span class="prediction-stat-mark">AVG</span>
+                </div>
+                <p class="prediction-stat-value" id="avgMonthlyExpense">Loading</p>
+              </article>
+              <article class="prediction-stat-card">
+                <div class="prediction-stat-header">
+                  <span class="prediction-stat-label">Next Month</span>
+                  <span class="prediction-stat-mark">NEXT</span>
+                </div>
+                <p class="prediction-stat-value" id="nextMonthPrediction">Loading</p>
+              </article>
+              <article class="prediction-stat-card">
+                <div class="prediction-stat-header">
+                  <span class="prediction-stat-label">3-Month Total</span>
+                  <span class="prediction-stat-mark">3M</span>
+                </div>
+                <p class="prediction-stat-value" id="threeMonthTotal">Loading</p>
+              </article>
+              <article class="prediction-stat-card">
+                <div class="prediction-stat-header">
+                  <span class="prediction-stat-label">Yearly Projection</span>
+                  <span class="prediction-stat-mark">12M</span>
+                </div>
+                <p class="prediction-stat-value" id="yearlyProjection">Loading</p>
+              </article>
+            </div>
+
+            <section class="content-panel predictions-chart-panel" aria-label="Expense predictions chart">
+              <div class="section-heading">
+                <div>
+                  <h2>Monthly forecast</h2>
+                  <p>Predicted expenses for the next 12 months with confidence intervals</p>
+                </div>
+              </div>
+              <div class="chart" id="predictionsChart" aria-label="12-month expense prediction chart" role="img"></div>
+            </section>
+
+            <section class="content-panel predictions-table-panel" aria-label="Monthly predictions table">
+              <div class="section-heading">
+                <div>
+                  <h2>Monthly breakdown</h2>
+                  <p>Detailed predictions with confidence ranges</p>
+                </div>
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Month</th>
+                      <th scope="col">Predicted</th>
+                      <th scope="col">Confidence Range</th>
+                      <th scope="col">Confidence</th>
+                    </tr>
+                  </thead>
+                  <tbody id="predictionsTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="content-panel seasonal-panel" aria-label="Seasonal analysis">
+              <div class="section-heading">
+                <div>
+                  <h2>Seasonal patterns</h2>
+                  <p>When your expenses typically rise and fall</p>
+                </div>
+              </div>
+              <div class="seasonal-grid" id="seasonalGrid"></div>
+            </section>
+
+            <section class="content-panel recommendations-panel" aria-label="Savings recommendations">
+              <div class="section-heading">
+                <div>
+                  <h2>Savings recommendations</h2>
+                  <p>Actionable insights based on your predicted expenses</p>
+                </div>
+              </div>
+              <div class="recommendations-list" id="recommendationsList"></div>
             </section>
           </section>
 

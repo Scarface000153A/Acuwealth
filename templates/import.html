@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="theme-color" content="#030405">
+    <meta name="description" content="Import your UPI and bank transactions automatically into Acuwealth">
+    <title>Acuwealth | Smart Import</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23c6c9ce%22 stroke-width=%221.5%22><circle cx=%2212%22 cy=%2212%22 r=%229%22/><path d=%22M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z%22/></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </head>
+  <body class="import-page-body">
+    <div class="import-page-container">
+      <header class="import-header">
+        <a href="/" class="import-brand">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M3.5 12h17M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path>
+          </svg>
+          <span>Acuwealth</span>
+        </a>
+        <h1>Import Transactions</h1>
+        <p class="import-subtitle">Upload screenshots, statements, or paste SMS to auto-add transactions</p>
+      </header>
+
+      <div class="import-methods">
+        <div class="import-method-card" data-method="screenshot">
+          <div class="import-method-icon">📸</div>
+          <h3>Upload Screenshot</h3>
+          <p>From GPay, PhonePe, Paytm, or bank app</p>
+          <label class="import-file-label">
+            <input type="file" id="screenshotInput" accept="image/*,.pdf" hidden>
+            <span class="button button-primary button-wide">Choose File</span>
+          </label>
+          <p class="import-hint">Supports PNG, JPG, PDF</p>
+        </div>
+
+        <div class="import-method-card" data-method="statement">
+          <div class="import-method-icon">📄</div>
+          <h3>Upload Statement</h3>
+          <p>Bank statement or UPI export (CSV/Excel/PDF)</p>
+          <label class="import-file-label">
+            <input type="file" id="statementInput" accept=".csv,.xlsx,.xls,.pdf" hidden>
+            <span class="button button-primary button-wide">Choose File</span>
+          </label>
+          <p class="import-hint">Supports CSV, Excel, PDF</p>
+        </div>
+
+        <div class="import-method-card" data-method="sms">
+          <div class="import-method-icon">💬</div>
+          <h3>Paste SMS/Email</h3>
+          <p>Copy-paste transaction SMS or email notifications</p>
+          <textarea id="smsTextInput" class="import-text-area" placeholder="Paste your transaction SMS or email here...&#10;&#10;Example:&#10;Rs 500 debited from A/c XX1234 on 15/10/2024 towards ZOMATO"></textarea>
+          <button class="button button-primary button-wide" id="parseSmsBtn">Parse Text</button>
+        </div>
+
+        <div class="import-method-card" data-method="qr">
+          <div class="import-method-icon">📱</div>
+          <h3>Scan QR Code</h3>
+          <p>Generate your personal import QR code</p>
+          <button class="button button-primary button-wide" id="generateQrBtn">Generate QR</button>
+          <div id="qrCodeContainer" class="qr-code-container" hidden>
+            <img id="qrCodeImage" alt="Your personal import QR code" src="">
+            <p class="import-hint">Scan this to open import page instantly on your phone</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="parsingStatus" class="parsing-status" hidden>
+        <div class="parsing-spinner"></div>
+        <p>Reading your transactions...</p>
+      </div>
+
+      <section id="previewSection" class="import-preview-section" hidden>
+        <div class="import-preview-header">
+          <h2>Review Transactions</h2>
+          <p>Edit any details before importing</p>
+          <div class="preview-actions">
+            <button class="button button-quiet" id="clearPreviewBtn">Clear</button>
+            <button class="button button-primary" id="importAllBtn">Import All (<span id="importCount">0</span>)</button>
+          </div>
+        </div>
+
+        <div class="import-preview-table">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Amount</th>
+                  <th scope="col">Category</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="previewTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <p class="import-summary" id="importSummary"></p>
+      </section>
+
+      <div class="import-tips">
+        <h3>💡 Tips for Best Results</h3>
+        <ul>
+          <li><strong>Screenshots:</strong> Ensure text is clear and not blurry</li>
+          <li><strong>Statements:</strong> Use official bank exports for best accuracy</li>
+          <li><strong>SMS:</strong> Include full message with date, amount, and merchant</li>
+          <li><strong>Review:</strong> Always review before importing to catch any OCR errors</li>
+        </ul>
+      </div>
+
+      <footer class="import-footer">
+        <p>&copy; {{ year }} Acuwealth. Your data stays private and is never shared.</p>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script>
+      // Import page JavaScript
+      (() => {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+        const toast = document.getElementById('toast');
+        const parsingStatus = document.getElementById('parsingStatus');
+        const previewSection = document.getElementById('previewSection');
+        const previewTableBody = document.getElementById('previewTableBody');
+        const importCount = document.getElementById('importCount');
+        const importSummary = document.getElementById('importSummary');
+        const qrCodeContainer = document.getElementById('qrCodeContainer');
+        const qrCodeImage = document.getElementById('qrCodeImage');
+
+        let parsedTransactions = [];
+        let categoryOptions = { expense: [], income: [] };
+
+        function showToast(message) {
+          toast.textContent = message;
+          toast.hidden = false;
+          setTimeout(() => { toast.hidden = true; }, 4000);
+        }
+
+        function showParsing(show) {
+          parsingStatus.hidden = !show;
+        }
+
+        function inferKind(description) {
+          const text = description.toLowerCase();
+          if (text.includes('credited') || text.includes('received') || text.includes('salary') || text.includes('refund')) {
+            return 'income';
+          }
+          return 'expense';
+        }
+
+        function renderPreview(transactions) {
+          parsedTransactions = transactions;
+          importCount.textContent = transactions.length;
+
+          if (transactions.length === 0) {
+            previewTableBody.innerHTML = '<tr><td colspan="6" class="table-empty">No transactions found. Try uploading a clearer image or different file.</td></tr>';
+            previewSection.hidden = false;
+            return;
+          }
+
+          previewTableBody.innerHTML = transactions.map((txn, index) => {
+            const kind = txn.kind || inferKind(txn.description || '');
+            const categories = kind === 'income' ? categoryOptions.income : categoryOptions.expense;
+            
+            return `
+              <tr data-index="${index}">
+                <td>
+                  <input type="date" class="import-input" data-field="occurred_on" value="${txn.date || ''}" required>
+                </td>
+                <td>
+                  <select class="import-select" data-field="kind">
+                    <option value="expense"${kind === 'expense' ? ' selected' : ''}>Expense</option>
+                    <option value="income"${kind === 'income' ? ' selected' : ''}>Income</option>
+                  </select>
+                </td>
+                <td>
+                  <input type="text" class="import-input" data-field="description" value="${(txn.description || '').substring(0, 120)}" maxlength="120">
+                </td>
+                <td>
+                  <input type="number" class="import-input" data-field="amount" value="${txn.amount || ''}" step="0.01" min="0.01" style="width: 100px;">
+                </td>
+                <td>
+                  <select class="import-select" data-field="category" data-kind="${kind}">
+                    ${categories.map(cat => `<option value="${cat}"${cat === txn.category ? ' selected' : ''}>${cat}</option>`).join('')}
+                  </select>
+                </td>
+                <td>
+                  <button class="delete-button" type="button" onclick="removeTransaction(${index})">Remove</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+
+          previewSection.hidden = false;
+          importSummary.textContent = `Found ${transactions.length} transaction(s). Review and edit if needed, then click "Import All".`;
+        }
+
+        window.removeTransaction = function(index) {
+          parsedTransactions.splice(index, 1);
+          importCount.textContent = parsedTransactions.length;
+          renderPreview(parsedTransactions);
+        };
+
+        // Update category dropdowns when kind changes
+        previewTableBody.addEventListener('change', (e) => {
+          if (e.target.matches('[data-field="kind"]')) {
+            const row = e.target.closest('tr');
+            const index = row.dataset.index;
+            const newKind = e.target.value;
+            const categorySelect = row.querySelector('[data-field="category"]');
+            
+            const categories = newKind === 'income' ? categoryOptions.income : categoryOptions.expense;
+            categorySelect.innerHTML = categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            categorySelect.dataset.kind = newKind;
+            
+            // Update transaction data
+            parsedTransactions[index].kind = newKind;
+          }
+        });
+
+        // File upload handlers
+        document.getElementById('screenshotInput').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          await parseFile(file);
+        });
+
+        document.getElementById('statementInput').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          await parseFile(file);
+        });
+
+        document.getElementById('parseSmsBtn').addEventListener('click', async () => {
+          const text = document.getElementById('smsTextInput').value;
+          if (!text.trim()) {
+            showToast('Please paste some SMS or email text first.');
+            return;
+          }
+          await parseText(text);
+        });
+
+        document.getElementById('generateQrBtn').addEventListener('click', async () => {
+          try {
+            const response = await fetch('/api/import/qr-code', {
+              headers: { 'X-CSRF-Token': csrfToken }
+            });
+            
+            if (!response.ok) {
+              const error = await response.json();
+              showToast(error.error || 'Failed to generate QR code');
+              return;
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            qrCodeImage.src = url;
+            qrCodeContainer.hidden = false;
+            showToast('QR code generated! Scan it to open import page on your phone.');
+          } catch (error) {
+            showToast('Failed to generate QR code: ' + error.message);
+          }
+        });
+
+        document.getElementById('clearPreviewBtn').addEventListener('click', () => {
+          parsedTransactions = [];
+          previewSection.hidden = true;
+          document.getElementById('screenshotInput').value = '';
+          document.getElementById('statementInput').value = '';
+          document.getElementById('smsTextInput').value = '';
+        });
+
+        document.getElementById('importAllBtn').addEventListener('click', async () => {
+          if (parsedTransactions.length === 0) {
+            showToast('No transactions to import.');
+            return;
+          }
+
+          // Gather data from table
+          const rows = previewTableBody.querySelectorAll('tr');
+          const transactions = [];
+          
+          rows.forEach(row => {
+            const index = row.dataset.index;
+            if (index === undefined) return;
+            
+            const txn = {
+              occurred_on: row.querySelector('[data-field="occurred_on"]')?.value,
+              kind: row.querySelector('[data-field="kind"]')?.value || 'expense',
+              description: row.querySelector('[data-field="description"]')?.value || '',
+              amount: row.querySelector('[data-field="amount"]')?.value || '0',
+              category: row.querySelector('[data-field="category"]')?.value || 'Other expense',
+              currency: 'INR'
+            };
+            
+            if (txn.occurred_on && txn.amount) {
+              transactions.push(txn);
+            }
+          });
+
+          if (transactions.length === 0) {
+            showToast('No valid transactions to import. Please fill in date and amount.');
+            return;
+          }
+
+          try {
+            showParsing(true);
+            
+            const response = await fetch('/api/import/bulk', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+              },
+              body: JSON.stringify({ transactions })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+              showToast(result.error || 'Import failed');
+              return;
+            }
+
+            showToast(result.message || `Imported ${result.created} transaction(s)!`);
+            
+            // Clear and redirect or refresh
+            setTimeout(() => {
+              window.location.href = '/#transactions';
+            }, 1500);
+
+          } catch (error) {
+            showToast('Import failed: ' + error.message);
+          } finally {
+            showParsing(false);
+          }
+        });
+
+        async function parseFile(file) {
+          showParsing(true);
+          
+          const formData = new FormData();
+          formData.append('file', file);
+
+          try {
+            const response = await fetch('/api/import/parse', {
+              method: 'POST',
+              headers: { 'X-CSRF-Token': csrfToken },
+              body: formData
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+              showToast(result.error || 'Failed to parse file');
+              return;
+            }
+
+            if (result.errors && result.errors.length) {
+              showToast('Warning: ' + result.errors.join(', '));
+            }
+
+            if (result.transactions && result.transactions.length > 0) {
+              parsedTransactions = result.transactions;
+              categoryOptions = result.category_options || { expense: [], income: [] };
+              renderPreview(parsedTransactions);
+              showToast(`Found ${parsedTransactions.length} transaction(s). Review before importing.`);
+            } else {
+              showToast('No transactions found. Try a clearer image or different file.');
+              previewSection.hidden = true;
+            }
+
+          } catch (error) {
+            showToast('Parse failed: ' + error.message);
+          } finally {
+            showParsing(false);
+          }
+        }
+
+        async function parseText(text) {
+          showParsing(true);
+          
+          const formData = new FormData();
+          formData.append('text', text);
+
+          try {
+            const response = await fetch('/api/import/parse', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRF-Token': csrfToken
+              },
+              body: formData
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+              showToast(result.error || 'Failed to parse text');
+              return;
+            }
+
+            if (result.errors && result.errors.length) {
+              showToast('Warning: ' + result.errors.join(', '));
+            }
+
+            if (result.transactions && result.transactions.length > 0) {
+              parsedTransactions = result.transactions;
+              categoryOptions = result.category_options || { expense: [], income: [] };
+              renderPreview(parsedTransactions);
+              showToast(`Found ${parsedTransactions.length} transaction(s). Review before importing.`);
+            } else {
+              showToast('No transactions found. Ensure SMS includes date, amount, and merchant.');
+              previewSection.hidden = true;
+            }
+
+          } catch (error) {
+            showToast('Parse failed: ' + error.message);
+          } finally {
+            showParsing(false);
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>

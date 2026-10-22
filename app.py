@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -27,6 +28,24 @@ try:
 except ImportError:
     PREDICTION_AVAILABLE = False
     predict_expenses = None
+
+# Import smart import service
+try:
+    from import_service import process_import
+    from import_service import TESSERACT_AVAILABLE, CV2_AVAILABLE
+    IMPORT_AVAILABLE = True
+except ImportError:
+    IMPORT_AVAILABLE = False
+    process_import = None
+    TESSERACT_AVAILABLE = False
+    CV2_AVAILABLE = False
+
+# QR code generation
+try:
+    import qrcode
+    QR_AVAILABLE = True
+except ImportError:
+    QR_AVAILABLE = False
 
 
 ROOT = Path(__file__).resolve().parent
@@ -1046,6 +1065,202 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return jsonify(
                 error=f"Prediction failed: {str(exc)}"
             ), 500
+
+    @app.get("/api/import/qr-code")
+    @authenticated
+    def import_qr_code() -> Any:
+        """Generate a personal QR code that opens the import page for this user."""
+        if not QR_AVAILABLE:
+            return jsonify(error="QR code generation is not available."), 503
+        
+        # Create a unique import URL for this user
+        user_id = g.user["id"]
+        # In production, use a proper signed token instead of user_id directly
+        import_url = f"{request.host_url}import?uid={user_id}"
+        
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(import_url)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to bytes for response
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        
+        from flask import Response
+        return Response(
+            img_bytes.getvalue(),
+            mimetype='image/png',
+            headers={'Content-Disposition': 'attachment; filename="acuwealth-import-qr.png"'}
+        )
+
+    @app.get("/import")
+    def import_page() -> str:
+        """Public import page (accessible via QR code)."""
+        user_id = request.args.get('uid', '')
+        # In production, validate the user_id with a token
+        return render_template(
+            "import.html",
+            user_id=user_id,
+            csrf_token=csrf_token(),
+            year=date.today().year
+        )
+
+    @app.post("/api/import/parse")
+    @authenticated
+    def parse_import() -> Any:
+        """Parse uploaded file or text for transactions."""
+        if not IMPORT_AVAILABLE:
+            return jsonify(
+                error="Import service is not available. Please install required dependencies."
+            ), 503
+        
+        user_currency = g.user["currency"]
+        
+        try:
+            # Check for file upload
+            if 'file' in request.files:
+                file = request.files['file']
+                if file.filename:
+                    file_data = file.read()
+                    filename_lower = file.filename.lower()
+                    
+                    if filename_lower.endswith(('.png', '.jpg', '.jpeg', '.webp', '.heic')):
+                        file_type = 'image'
+                    elif filename_lower.endswith('.pdf'):
+                        file_type = 'pdf'
+                    elif filename_lower.endswith('.csv'):
+                        file_type = 'csv'
+                    elif filename_lower.endswith(('.xlsx', '.xls')):
+                        file_type = 'excel'
+                    else:
+                        return jsonify(error=f"Unsupported file type: {file.filename}"), 400
+                    
+                    result = process_import(
+                        file_data=file_data,
+                        file_type=file_type,
+                        user_currency=user_currency
+                    )
+                else:
+                    return jsonify(error="No file selected"), 400
+            
+            # Check for text data
+            elif 'text' in request.form:
+                text_data = request.form['text']
+                if text_data.strip():
+                    result = process_import(
+                        text_data=text_data,
+                        user_currency=user_currency
+                    )
+                else:
+                    return jsonify(error="No text provided"), 400
+            
+            else:
+                return jsonify(error="No file or text data provided"), 400
+            
+            # Add category options for frontend
+            from app import EXPENSE_CATEGORIES, INCOME_CATEGORIES
+            result['category_options'] = {
+                'expense': EXPENSE_CATEGORIES,
+                'income': INCOME_CATEGORIES
+            }
+            
+            return jsonify(result)
+        
+        except Exception as exc:
+            return jsonify(
+                error=f"Parse failed: {str(exc)}"
+            ), 500
+
+    @app.post("/api/import/bulk")
+    @authenticated
+    def bulk_import() -> Any:
+        """Bulk create transactions from parsed data."""
+        db = get_db()
+        user_id = g.user["id"]
+        body = json_body()
+        
+        transactions = body.get('transactions', [])
+        if not isinstance(transactions, list) or not transactions:
+            return jsonify(error="No transactions provided"), 400
+        
+        created_count = 0
+        errors = []
+        
+        for i, txn in enumerate(transactions):
+            try:
+                # Validate required fields
+                kind = txn.get('kind', 'expense')
+                if kind not in {'income', 'expense'}:
+                    errors.append(f"Transaction {i+1}: Invalid kind '{kind}'")
+                    continue
+                
+                category = txn.get('category', '')
+                allowed_categories = INCOME_CATEGORIES if kind == 'income' else EXPENSE_CATEGORIES
+                if category not in allowed_categories:
+                    category = allowed_categories[-1]  # Default to "Other"
+                
+                # Access currency from g.user (sqlite3.Row)
+                user_currency = g.user["currency"]
+                currency = txn.get('currency', user_currency)
+                if currency not in SUPPORTED_CURRENCIES:
+                    currency = 'INR'
+                
+                description = str(txn.get('description', '')).strip()[:120]
+                
+                try:
+                    cents = amount_to_cents(txn.get('amount', '0'))
+                except ValueError as e:
+                    errors.append(f"Transaction {i+1}: {str(e)}")
+                    continue
+                
+                try:
+                    occurred_on = date.fromisoformat(str(txn.get('occurred_on', '')))
+                except ValueError:
+                    errors.append(f"Transaction {i+1}: Invalid date format")
+                    continue
+                
+                # Insert transaction
+                insert_id(
+                    db,
+                    "INSERT INTO transactions "
+                    "(user_id, kind, category, description, amount_cents, currency, occurred_on, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        user_id,
+                        kind,
+                        category,
+                        description,
+                        cents,
+                        currency,
+                        occurred_on.isoformat(),
+                        utc_now().isoformat(timespec="seconds"),
+                    ),
+                )
+                created_count += 1
+            
+            except Exception as e:
+                errors.append(f"Transaction {i+1}: {str(e)}")
+        
+        db.commit()
+        
+        if created_count == 0:
+            return jsonify(error="No transactions were created", details=errors), 400
+        
+        return jsonify(
+            ok=True,
+            created=created_count,
+            errors=errors if errors else None,
+            message=f"Successfully imported {created_count} transaction(s)."
+        ), 201
 
     return app
 

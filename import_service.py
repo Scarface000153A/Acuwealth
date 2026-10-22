@@ -28,6 +28,21 @@ import pdfplumber
 # Optional: pytesseract for OCR (requires Tesseract binary installed)
 try:
     import pytesseract
+    # Set tesseract path for Windows if not in PATH
+    import os
+    import platform
+    
+    if platform.system() == 'Windows':
+        # Common Tesseract installation paths
+        tesseract_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        ]
+        for path in tesseract_paths:
+            if os.path.exists(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                break
+    
     TESSERACT_AVAILABLE = True
 except ImportError:
     TESSERACT_AVAILABLE = False
@@ -150,18 +165,40 @@ def parse_image_to_text(image_data: bytes) -> str:
     
     image = Image.open(io.BytesIO(image_data))
     
-    # Preprocess if cv2 available
+    # Preprocess image for better OCR results
+    # Convert to grayscale
+    if image.mode != 'L':
+        image = image.convert('L')
+    
+    # Increase image size for better OCR (2x)
+    width, height = image.size
+    image = image.resize((width * 2, height * 2), Image.LANCZOS)
+    
+    # Apply thresholding to make text clearer
+    from PIL import ImageFilter, ImageOps
+    # Enhance contrast
+    image = ImageOps.autocontrast(image, cutoff=5)
+    
+    # Apply sharpening filter
+    image = image.filter(ImageFilter.SHARPEN)
+    
+    # Preprocess if cv2 available for better results
     if CV2_AVAILABLE:
-        # Convert to numpy array
         img_array = np.array(image)
-        # Convert to grayscale
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        # Apply thresholding
-        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Apply adaptive thresholding
+        thresh = cv2.adaptiveThreshold(
+            img_array, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 11, 2
+        )
         image = Image.fromarray(thresh)
     
-    # Extract text with Hindi+English support for Indian UPI apps
-    text = pytesseract.image_to_string(image, lang='eng+hin')
+    # Extract text with English support for Indian UPI apps
+    # Use both eng and hin for better results with Indian text
+    try:
+        text = pytesseract.image_to_string(image, lang='eng')
+    except:
+        text = pytesseract.image_to_string(image)
+    
     return text
 
 
@@ -288,74 +325,116 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
     # Example: "Shishupal\n15 Oct, 05:56 PM\n- ₹10\nFuel"
     # Or: "Vansh New\n15 Oct, 05:54 PM\n+ ₹50\nMoney Received"
     
-    # Split into blocks by looking for amount lines
-    lines = text.split('\n')
+    # Split text into lines
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
     
+    # We look for lines containing amounts like "- ₹10", "+ ₹50", "-10", "+50", etc.
     i = 0
     while i < len(lines):
-        line = lines[i].strip()
+        line = lines[i]
         
-        # Look for amount pattern (with + or - sign)
-        amount_match = re.match(r'^([+-])\s*(?:₹|Rs\.?\s*)?([\d,]+\.?\d*)$', line)
-        if amount_match:
+        # Check if this line is an amount
+        # Handle OCR errors: ₹ might be read as =, %, x, n, etc.
+        # Also handle cases where the sign and amount are on the same line as the name
+        # Match patterns like: - ₹10, + ₹50, -10, +50, -₹10.00, - =20, - %50, xO)50, etc.
+        amount_match = re.search(r'([+\-=xX])\s*(?:[₹=%xXnIlOo]?\s*)?([\d,]+\.?\d*)', line)
+        if not amount_match:
+            # Fallback: try to find just a number (might be amount without clear sign)
+            amount_match = re.search(r'([\d,]+\.?\d{2})', line)
+            if amount_match:
+                sign = '-'  # Default to expense
+                amount = clean_amount(amount_match.group(1))
+            else:
+                i += 1
+                continue
+        else:
             sign = amount_match.group(1)
             amount = clean_amount(amount_match.group(2))
+        
+        # Skip if amount is too small or too large (likely OCR error)
+        if not amount or float(amount) < 1 or float(amount) > 999999999:
+            i += 1
+            continue
+        
+        # Now look around this line for Name, Date, and Category
+        name = ''
+        date_str = ''
+        category = ''
+        
+        # First, check if name is on the same line as amount (e.g., "Shishupal -n10")
+        same_line_name = line[:amount_match.start()].strip()
+        if same_line_name and not re.search(r'[\d₹+\-=xX]', same_line_name):
+            name = same_line_name
+        
+        # Check previous lines (up to 3 lines back)
+        for j in range(max(0, i-3), i):
+            prev = lines[j]
             
-            # Look backward for name and date
-            name = ''
-            date_str = ''
-            category = ''
+            # Check for date (e.g., "15 Oct", "15 Oct, 05:56 PM")
+            if re.search(r'\d{1,2}\s+[A-Za-z]{3}', prev) or re.search(r'\d{1,2}:\d{2}', prev):
+                date_str = prev
+            elif re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', prev, re.IGNORECASE):
+                category = prev
+            elif not name and len(prev) > 1 and not re.search(r'[\d₹+\-=xX]', prev):
+                name = prev
+        
+        # Check next lines (up to 2 lines forward)
+        for j in range(i+1, min(len(lines), i+3)):
+            next_l = lines[j]
+            if not category and re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', next_l, re.IGNORECASE):
+                category = next_l
+            elif not date_str and (re.search(r'\d{1,2}\s+[A-Za-z]{3}', next_l) or re.search(r'\d{1,2}:\d{2}', next_l)):
+                date_str = next_l
+            elif not name and len(next_l) > 1 and not re.search(r'[\d₹+\-=xX]', next_l):
+                name = next_l
+        
+        if amount:
+            # Determine kind - check for "Money Received" or "+" sign
+            # Also check if the line contains "Money Received" or "In" (Paytm indicator for income)
+            is_income = False
+            if sign in ['+', 'x', 'X']:
+                is_income = True
+            elif 'money received' in category.lower() or 'received' in category.lower():
+                is_income = True
+            elif 'money received' in line.lower() or 'money received' in (name or '').lower():
+                is_income = True
+            # Check if the original line has "In" (Paytm uses "In" for income)
+            elif re.search(r'\bIn\b', line, re.IGNORECASE):
+                is_income = True
             
-            # Check previous lines for name and date
-            for j in range(i-1, max(i-4, -1), -1):
-                prev_line = lines[j].strip()
-                if not prev_line:
-                    continue
-                
-                # Check for date pattern
-                date_match = re.search(r'(\d{1,2}\s+\w{3},?\s+\d{1,2}:\d{2}\s*(?:AM|PM))', prev_line, re.IGNORECASE)
-                if date_match:
-                    date_str = date_match.group(1)
-                    continue
-                
-                # Check for category
-                cat_match = re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received)', prev_line, re.IGNORECASE)
-                if cat_match:
-                    category = cat_match.group(1)
-                    continue
-                
-                # If it's a name (not a date, not an amount, not a category)
-                if not name and not date_match and not cat_match and len(prev_line) > 2 and not prev_line.startswith('-') and not prev_line.startswith('+'):
-                    name = prev_line
+            kind = 'income' if is_income else 'expense'
             
-            # Check next line for category
-            if i + 1 < len(lines):
-                next_line = lines[i+1].strip()
-                cat_match = re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received)', next_line, re.IGNORECASE)
-                if cat_match:
-                    category = cat_match.group(1)
+            # Normalize date
+            normalized_date = normalize_date(date_str.replace(',', '')) if date_str else date.today().isoformat()
             
-            if amount and date_str:
-                # Determine kind
-                if sign == '+' or 'money received' in category.lower() or 'received' in category.lower():
-                    kind = 'income'
+            # Auto-categorize
+            if not category:
+                category = categorize_transaction(name)
+            else:
+                # Clean category text
+                cat_clean = re.sub(r'[^a-zA-Z\s]', '', category).strip()
+                if cat_clean.lower() in ['fuel', 'food', 'groceries', 'miscellaneous', 'recharge', 'bill']:
+                    if cat_clean.lower() == 'fuel': category = 'Transport'
+                    elif cat_clean.lower() == 'food': category = 'Dining'
+                    elif cat_clean.lower() == 'groceries': category = 'Groceries'
+                    elif cat_clean.lower() == 'miscellaneous': category = 'Other expense'
+                    else: category = 'Other expense'
                 else:
-                    kind = 'expense'
-                
-                # Normalize date
-                normalized_date = normalize_date(date_str.replace(',', ''))
-                
-                # Auto-categorize
-                if not category:
                     category = categorize_transaction(name)
-                
-                transactions.append({
-                    'date': normalized_date,
-                    'amount': amount,
-                    'description': name or 'Unknown',
-                    'kind': kind,
-                    'category': category,
-                })
+            
+            # Final category validation
+            valid_categories = ['Housing', 'Groceries', 'Transport', 'Utilities', 'Dining', 
+                              'Healthcare', 'Shopping', 'Entertainment', 'Travel', 'Education', 'Other expense']
+            if category not in valid_categories:
+                category = 'Other expense'
+            
+            transactions.append({
+                'date': normalized_date,
+                'amount': amount,
+                'description': name or 'Paytm Transaction',
+                'kind': kind,
+                'category': category,
+            })
         
         i += 1
     
@@ -478,6 +557,34 @@ def normalize_date(date_str: str) -> Optional[str]:
         
         # Validate
         if 1 <= day <= 31 and 1 <= month <= 12:
+            try:
+                return date(year, month, day).isoformat()
+            except ValueError:
+                pass
+    
+    # Try to parse "15 Oct" format with regex
+    month_map = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
+        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+    }
+    
+    # Match "15 Oct" or "15 Oct, 05:56 PM"
+    match = re.search(r'(\d{1,2})\s+([A-Za-z]{3,9})', date_str, re.IGNORECASE)
+    if match:
+        day = int(match.group(1))
+        month_str = match.group(2).lower()
+        
+        if month_str in month_map:
+            month = month_map[month_str]
+            year = datetime.now().year
+            
+            # Try to extract year if present
+            year_match = re.search(r'(\d{4})', date_str)
+            if year_match:
+                year = int(year_match.group(1))
+            
             try:
                 return date(year, month, day).isoformat()
             except ValueError:

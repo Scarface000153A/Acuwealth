@@ -318,13 +318,54 @@ def parse_sms_email_text(text: str) -> list[dict]:
 
 
 def parse_paytm_screenshot(text: str) -> list[dict]:
-    """Parse Paytm Payment History screenshot format specifically."""
+    """Parse Paytm Payment History or Receipt screenshot format specifically."""
     transactions = []
     
-    # Paytm screenshot pattern: Name, Date, Amount, Category
-    # Example: "Shishupal\n15 Oct, 05:56 PM\n- ₹10\nFuel"
-    # Or: "Vansh New\n15 Oct, 05:54 PM\n+ ₹50\nMoney Received"
+    # Check if this is a Paytm Receipt screenshot
+    # Use fuzzy matching for receipt indicators
+    is_receipt = any(re.search(p, text, re.IGNORECASE) for p in [
+        r'Paid Successfully', r'To:', r'UPI Ref No', r'Payment Successful', r'Sent Successfully'
+    ])
     
+    if is_receipt:
+        # Extract amount - look for a large number following a currency symbol or near "Paid"
+        # Matches: ₹40, Rs 40, 40, etc.
+        amount_match = re.search(r'(?:₹|Rs\.?|[^\d\s\w])\s*(\d{1,10}(?:\.\d{2})?)', text)
+        if not amount_match:
+            # Try finding any large number if currency symbol is misread
+            amounts = re.findall(r'\b\d{1,10}(?:\.\d{2})?\b', text)
+            if amounts:
+                # The largest number is usually the amount in a receipt
+                amount = max(amounts, key=lambda x: float(x.replace(',', '')))
+            else:
+                amount = None
+        else:
+            amount = clean_amount(amount_match.group(1))
+            
+        # Extract recipient name
+        name_match = re.search(r'(?:To:?|Paid to)\s*([^\n]+)', text, re.IGNORECASE)
+        # Extract date - try multiple formats
+        date_match = re.search(r'(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})', text)
+        if not date_match:
+            date_match = re.search(r'(\d{1,2}\s+[A-Za-z]{3})', text)
+            
+        if amount:
+            name = name_match.group(1).strip() if name_match else "Paytm Receipt"
+            date_str = date_match.group(1) if date_match else date.today().isoformat()
+            
+            normalized_date = normalize_date(date_str) or date.today().isoformat()
+            category = categorize_transaction(name)
+            
+            transactions.append({
+                'date': normalized_date,
+                'amount': str(amount),
+                'description': name,
+                'kind': 'expense',
+                'category': category,
+            })
+            return transactions
+
+    # Paytm history list parsing...
     # Split text into lines
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     

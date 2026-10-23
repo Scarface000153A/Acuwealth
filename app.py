@@ -54,13 +54,17 @@ def _log_rss(tag: str, **fields: Any) -> None:
     """
     try:
         import time as _time
+        import os
         parts = [f'{_time.strftime("%H:%M:%S")}', f'build={APP_BUILD}', f'tag={tag}']
         for key, value in fields.items():
             parts.append(f'{key}={value}')
         log_path = ROOT / 'instance' / 'rss_log.txt'
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(log_path, 'a') as fh:
+        # Unbuffered write with fsync so data survives immediate OOM kill
+        with open(log_path, 'a', buffering=1) as fh:
             fh.write(' '.join(str(p) for p in parts) + '\n')
+            fh.flush()
+            os.fsync(fh.fileno())
     except Exception:
         pass
 
@@ -306,6 +310,9 @@ def convert_cents(cents: int, source: str, target: str, rates: dict[str, Decimal
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
+    # Log worker startup RSS so we know the baseline when the process started
+    _log_rss('worker_start', rss=_rss_mb())
+    
     app = Flask(__name__)
     default_database = Path(os.environ.get("APP_DATABASE", ROOT / "instance" / "acuwealth.sqlite3"))
     app.config.from_mapping(

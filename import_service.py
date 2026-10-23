@@ -104,8 +104,8 @@ def _rapidocr_image_to_text(image) -> str:
     """
     # Cap image size: full-size A4 scans exhaust the memory of small server
     # instances (Render free tier = 512MB -> worker OOM kill). PP-OCR is
-    # accurate on ~1400px images.
-    max_side = 1400
+    # accurate on ~1300px images (down from 1400 to reduce peak RSS).
+    max_side = 1300
     if max(image.size) > max_side:
         scale = max_side / max(image.size)
         image = image.resize(

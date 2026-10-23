@@ -21,6 +21,10 @@ import psycopg
 from psycopg.rows import dict_row
 from flask import Flask, g, jsonify, render_template, request, session
 
+# Build marker: bump on every deploy so live tests can confirm which commit is
+# actually running (Render auto-deploys take a few minutes after push).
+APP_BUILD = "6e2b82a"
+
 # Import prediction service.
 # Lazy: scikit-learn + pandas are heavy (~130MB RSS); on memory-limited hosts
 # (Render free tier = 512MB) loading them eagerly leaves too little room for
@@ -303,6 +307,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             )
 
     limiter = RateLimiter()
+
+    @app.after_request
+    def attach_build_marker(response):
+        # Lets live tests verify which commit Render has deployed.
+        response.headers["X-App-Build"] = APP_BUILD
+        return response
 
     @app.before_request
     def protect_state_changes() -> Any:

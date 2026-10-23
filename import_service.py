@@ -17,7 +17,7 @@ Auto-detects:
 import re
 import io
 import csv
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Any, Optional
 from decimal import Decimal
 
@@ -369,159 +369,229 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
     # Split text into lines
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     
-    # First, collect all transaction blocks (Name + Date + Category)
-    # Pattern: Name, Date, Category (with possible OCR noise)
-    blocks = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
+    NOISE_NAME = re.compile(
+        r'^(Payment\s+History|Balance|Total\s+Spent|October\s+\d{4}|UPI\s+Ref|Canara\s+Bank|'
+        r'YES\s+BANK|Paid\s+Successfully|Rupees\s+\w+|Paytm\s*\|)', re.IGNORECASE)
+    CAT_KEYWORDS = re.compile(
+        r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|'
+        r'Healthcare|Recharge|Bill|Money\s*Received|Miscellaneous)', re.IGNORECASE)
+    
+    def is_clean_name(name):
+        """Return True if a candidate name looks like a real merchant/person name."""
+        if not name or len(name) < 2:
+            return False
+        if re.match(r'^[^\w\s]+$', name):
+            return False
+        if NOISE_NAME.search(name):
+            return False
+        if '@' in name or re.search(r'\d{5,}', name):
+            return False
+        # Mostly-OCR-gibberish check
+        if len(re.sub(r'[\s\w]', '', name)) > len(name) * 0.3:
+            return False
+        # Too few letters (e.g. "> Oo")
+        if len(re.findall(r'[A-Za-z]', name)) < 3:
+            return False
+        return True
+    
+    def build_transaction(block, sign, amount_line, amount):
+        """Build a transaction dict from a block + amount info, or None if invalid."""
+        if not is_clean_name(block['name']):
+            return None
         
-        # Look for date pattern (e.g., "15 Oct", "15 Oct, 05:56 PM")
-        date_match = re.search(r'(\d{1,2}\s+[A-Za-z]{3})', line)
-        if date_match:
-            # Found a date - look backward for name, forward for category
-            name = ''
-            date_str = line
+        # Determine kind
+        is_income = sign in ['+', 'x', 'X']
+        if not is_income:
+            cat_l = block['category'].lower()
+            if 'received' in cat_l or 'received' in (block['name'] or '').lower():
+                is_income = True
+            elif 'received' in amount_line.lower():
+                is_income = True
+        
+        kind = 'income' if is_income else 'expense'
+        
+        # Normalize date - skip transactions with unparseable dates
+        # Normalize date - handle Today/Yesterday, skip unparseable dates
+        raw_date = block['date']
+        if re.match(r'Today', raw_date, re.IGNORECASE):
+            normalized_date = date.today().isoformat()
+        elif re.match(r'Yesterday', raw_date, re.IGNORECASE):
+            normalized_date = (date.today() - timedelta(days=1)).isoformat()
+        else:
+            normalized_date = normalize_date(raw_date.replace(',', '')) if raw_date else None
+        if not normalized_date:
+            return None
+        
+        # Auto-categorize
+        category = block['category']
+        cat_clean = re.sub(r'[^a-zA-Z\s]', '', category).strip().lower() if category else ''
+        if cat_clean == 'fuel':
+            category = 'Transport'
+        elif cat_clean == 'food':
+            category = 'Dining'
+        elif cat_clean == 'groceries':
+            category = 'Groceries'
+        elif cat_clean in ('money received',):
+            category = 'Other expense'
+        elif cat_clean:
+            category = categorize_transaction(block['name'])
+        else:
+            category = categorize_transaction(block['name'])
+        
+        valid_categories = ['Housing', 'Groceries', 'Transport', 'Utilities', 'Dining',
+                            'Healthcare', 'Shopping', 'Entertainment', 'Travel', 'Education', 'Other expense']
+        if category not in valid_categories:
+            category = 'Other expense'
+        
+        return {
+            'date': normalized_date,
+            'amount': amount,
+            'description': block['name'],
+            'kind': kind,
+            'category': category,
+        }
+    
+    # Segment the text by page headers ("Payment History") so blocks and amounts
+    # are paired within the same page. Tesseract reads the names column first and
+    # then the amounts column, so within a segment we pair them in order.
+    segments = [[]]
+    for line in lines:
+        if re.search(r'Payment\s*History', line, re.IGNORECASE) and len(segments[-1]) > 0:
+            segments.append([])
+        segments[-1].append(line)
+    
+    def parse_amount_line(line):
+        """Return (sign, amount) if the line contains an amount, else None."""
+        if re.match(r'^(From|In|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES)\b', line, re.IGNORECASE):
+            return None
+        if len(line) < 3:
+            return None
+        if re.match(r'^[^\w\s]+$', line):
+            return None
+        # Skip date/time-only lines (e.g. "06:12 PM, 22 Oct 2026")
+        if re.search(r'\d{1,2}:\d{2}', line) and not re.search(r'([+\-=]+)\s*[₹=%$xXnIlOo]?\s*[\d,]+', line):
+            return None
+        # Skip month-total lines (e.g. "October 2026 Total Spent", "crober 22,405")
+        if re.search(r'\b(Oct|Octo|October|ober|crober|ctoper|cto?ber)\b\s*\d|Total\s*Spent', line, re.IGNORECASE):
+            return None
+        # Skip UPI ID / account lines
+        if '@' in line or re.search(r'\d{5,}[a-zA-Z]|[a-zA-Z]\d{5,}', line):
+            return None
+        # Paytm amounts carry a sign: - ₹10, + ₹50, - $150, += ₹2500, - %50...
+        # The symbol may be an OCR replacement char, so allow any single non-word char.
+        m = re.search(r'([+\-=]+)\s*(?:[^\w\s]?\s*)?([\d,]+\.?\d*)', line)
+        if not m:
+            return None
+        amt = clean_amount(m.group(2))
+        if not amt or float(amt) < 1 or float(amt) > 999999999:
+            return None
+        if float(amt) in (2024, 2025, 2026, 2027):
+            return None
+        return ('+' if '+' in m.group(1) else '-'), amt
+    
+    def clean_name(s):
+        """Strip trailing OCR junk symbols; return None if not a plausible name."""
+        s = re.sub(r'[^\w\s]+$', '', s).strip()
+        if not s or len(s) < 2 or re.search(r'\d', s):
+            return None
+        if re.search(r'[^\w\s.,\'&/-]', s):
+            return None
+        if re.fullmatch(r'[^\w]*\s*(?:Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money\s*Received|Miscellaneous)\s*[^\w]*', s, re.IGNORECASE):
+            return None
+        if NOISE_NAME.search(s):
+            return None
+        if '@' in s:
+            return None
+        return s
+    
+    def find_name(seg, date_idx):
+        """Find the merchant name for a date line, handling inline amounts."""
+        inline_amount = None
+        inline_name = None
+        first_clean = None
+        for j in range(max(0, date_idx - 3), date_idx):
+            prev = seg[j]
+            parsed = parse_amount_line(prev)
+            candidate = prev
+            if parsed:
+                m = re.search(r'([+\-=]+)\s*(?:[^\w\s]?\s*)?[\d,]+\.?\d*', prev)
+                before = clean_name(prev[:m.start()])
+                if before:
+                    # Inline amount on this line: definitive name line
+                    return before, parsed
+                if inline_amount is None:
+                    inline_amount = parsed
+                    inline_name = clean_name(prev[:m.start()])
+                continue
+            candidate = clean_name(prev)
+            if candidate and first_clean is None:
+                first_clean = candidate
+        if inline_amount and inline_name:
+            return inline_name, inline_amount
+        return first_clean or '', None
+    
+    for segment in segments:
+        blocks = []
+        for i, line in enumerate(segment):
+            is_date_line = (
+                re.search(r'\d{1,2}\s+[A-Za-z]{3}', line)
+                or re.match(r'(Today|Yesterday),\s*\d{1,2}:\d{2}', line, re.IGNORECASE)
+            )
+            if not is_date_line:
+                continue
+            name, inline_amount = find_name(segment, i)
+            
             category = ''
-            
-            # Look backward for name (up to 3 lines)
-            for j in range(max(0, i-3), i):
-                prev = lines[j]
-                # Skip if it looks like a date, amount, or category
-                if re.search(r'[\d₹+\-=xX]', prev):
-                    continue
-                if re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries|Payment|History|Balance|Total|Spent|October|UPI|Ref|Canara|Bank|Failed|Paytm|Powered|YES|In|From|To)', prev, re.IGNORECASE):
-                    continue
-                # Skip OCR noise
-                if len(prev) < 2:
-                    continue
-                if re.match(r'^[^\w\s]+$', prev):
-                    continue
-                name = prev
-                break
-            
-            # Look forward for category (up to 2 lines)
-            for j in range(i+1, min(len(lines), i+3)):
-                next_l = lines[j]
-                cat_match = re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', next_l, re.IGNORECASE)
-                if cat_match:
-                    category = next_l
+            for j in range(i + 1, min(len(segment), i + 3)):
+                if CAT_KEYWORDS.search(segment[j]):
+                    category = segment[j]
                     break
             
             blocks.append({
-                'name': name,
-                'date': date_str,
-                'category': category,
-                'line_index': i
+                'name': name, 'date': line, 'category': category,
+                'line_index': i, 'inline_amount': inline_amount,
             })
         
-        i += 1
-    
-    # Now find all amounts
-    amounts = []
-    for i, line in enumerate(lines):
-        # Skip header/footer lines and OCR noise
-        if re.match(r'^(From|In|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES|Canara|Bank|Failed|Money|In|From|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES|Canara|Bank|Failed|Money|In|From|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES)', line, re.IGNORECASE):
-            continue
-        # Skip lines that are just symbols or OCR noise
-        if len(line) < 3:
-            continue
-        if re.match(r'^[^\w\s]+$', line):
-            continue
-        
-        # Look for amount pattern
-        amount_match = re.search(r'([+\-=xX])\s*(?:[₹=%xXnIlOo]?\s*)?([\d,]+\.?\d*)', line)
-        if not amount_match:
-            # Try just a number (might be amount without clear sign)
-            amount_match = re.search(r'([\d,]+\.?\d{2})', line)
-            if amount_match:
-                sign = '-'
-                amount = clean_amount(amount_match.group(1))
-            else:
-                continue
-        else:
-            sign = amount_match.group(1)
-            amount = clean_amount(amount_match.group(2))
-        
-        # Skip if amount is too small or too large
-        if not amount or float(amount) < 1 or float(amount) > 999999999:
-            continue
-        
-        amounts.append({
-            'line_index': i,
-            'sign': sign,
-            'amount': amount,
-            'line': line
-        })
-    
-    # Match amounts to blocks (nearest preceding block that hasn't been matched)
-    matched_blocks = set()
-    for amount_info in amounts:
-        # Find the nearest preceding block that hasn't been matched yet
-        best_block = None
+        # Only clean, named blocks participate in pairing
+        pending_blocks = []
+        has_inline = False
         for block in blocks:
-            if block['line_index'] < amount_info['line_index'] and id(block) not in matched_blocks:
-                if best_block is None or block['line_index'] > best_block['line_index']:
-                    best_block = block
+            if block['inline_amount']:
+                has_inline = True
+                sign, amt = block['inline_amount']
+                txn = build_transaction(block, sign, block['date'], amt)
+                if txn:
+                    transactions.append(txn)
+            elif is_clean_name(block['name']):
+                pending_blocks.append(block)
         
-        if best_block:
-            # Skip if name is empty or looks like OCR noise
-            if not best_block['name'] or len(best_block['name']) < 2:
-                continue
-            if re.match(r'^[^\w\s]+$', best_block['name']):
-                continue
-            # Skip obvious OCR noise / header lines
-            if re.search(r'^(Payment|History|Balance|Total|Spent|October|UPI|Ref|Canara|Bank|Failed|Paytm|Powered|YES|In|From|To|Paid|Successfully|Rupees|Only|Merchant|ID|Gerard|Robert|Vansh|Ashu|Mr|Sonu|Rathore|Satya|Narayan|Shishupal|Ganesh|Petroleum|Vinita|Food|Beverages|Chouhan|Kirana|Store|PhonePe|Pal|Sweets|Lalita|Jha|Jai|shri|ram|dairy|NEERENDRA|Lali|Kushvaha|Ranjeeta|Rekha|Rober|BharatPe|Merchant|Canara|Bank|Failed|Money|In|From|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES)', best_block['name'], re.IGNORECASE):
-                continue
-            
-            matched_blocks.add(id(best_block))
-            
-            # Determine kind
-            is_income = False
-            if amount_info['sign'] in ['+', 'x', 'X']:
-                is_income = True
-            elif 'money received' in best_block['category'].lower() or 'received' in best_block['category'].lower():
-                is_income = True
-            elif 'money received' in amount_info['line'].lower() or 'money received' in (best_block['name'] or '').lower():
-                is_income = True
-            elif re.search(r'\bIn\b', amount_info['line'], re.IGNORECASE):
-                is_income = True
-            
-            kind = 'income' if is_income else 'expense'
-            
-            # Normalize date
-            normalized_date = normalize_date(best_block['date'].replace(',', '')) if best_block['date'] else date.today().isoformat()
-            
-            # Auto-categorize
-            category = best_block['category']
-            if not category:
-                category = categorize_transaction(best_block['name'])
-            else:
-                cat_clean = re.sub(r'[^a-zA-Z\s]', '', category).strip()
-                if cat_clean.lower() in ['fuel', 'food', 'groceries', 'miscellaneous', 'recharge', 'bill']:
-                    if cat_clean.lower() == 'fuel': category = 'Transport'
-                    elif cat_clean.lower() == 'food': category = 'Dining'
-                    elif cat_clean.lower() == 'groceries': category = 'Groceries'
-                    elif cat_clean.lower() == 'miscellaneous': category = 'Other expense'
-                    else: category = 'Other expense'
-                else:
-                    category = categorize_transaction(best_block['name'])
-            
-            # Final category validation
-            valid_categories = ['Housing', 'Groceries', 'Transport', 'Utilities', 'Dining', 
-                              'Healthcare', 'Shopping', 'Entertainment', 'Travel', 'Education', 'Other expense']
-            if category not in valid_categories:
-                category = 'Other expense'
-            
-            transactions.append({
-                'date': normalized_date,
-                'amount': amount_info['amount'],
-                'description': best_block['name'] or 'Paytm Transaction',
-                'kind': kind,
-                'category': category,
-            })
+        # Column layout (names first, amounts in a group after) only applies to
+        # segments where no row carried its own inline amount. In mixed segments,
+        # leftover amounts cannot be reliably attributed, so skip them.
+        if has_inline:
+            continue
+        
+        amounts = []
+        for line in segment:
+            parsed = parse_amount_line(line)
+            if parsed:
+                amounts.append(parsed)
+        
+        for (sign, amt), block in zip(amounts, pending_blocks):
+            txn = build_transaction(block, sign, '', amt)
+            if txn:
+                transactions.append(txn)
     
-    return transactions
+    # Dedupe (merged PDFs often repeat the same row across pages)
+    seen = set()
+    deduped = []
+    for txn in transactions:
+        key = (txn['date'], txn['amount'], txn['description'], txn['kind'])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(txn)
+    
+    return deduped
 
 
 def parse_raw_text(text: str) -> list[dict]:

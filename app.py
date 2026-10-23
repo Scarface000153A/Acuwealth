@@ -25,7 +25,44 @@ from flask import Flask, g, jsonify, render_template, request, session
 # actually running (Render auto-deploys take a few minutes after push). A
 # descriptive label is used rather than a git hash, since a commit cannot
 # contain its own hash.
-APP_BUILD = "cache-engine-1"
+APP_BUILD = "rss-log-1"
+
+
+def _rss_mb() -> float | None:
+    """Current process RSS in MB (Linux /proc first; no dependency needed)."""
+    try:
+        with open('/proc/self/status') as fh:
+            for line in fh:
+                if line.startswith('VmRSS:'):
+                    return int(line.split()[1]) / 1024.0
+    except Exception:
+        pass
+    try:
+        import psutil
+        return psutil.Process().memory_info().rss / 1024.0 / 1024.0
+    except Exception:
+        return None
+
+
+def _log_rss(tag: str, **fields: Any) -> None:
+    """Append an RSS sample to a file that survives worker OOM restarts.
+
+    A crashed request can't return its own memory numbers, so samples are
+    flushed to disk as they are taken. The 'before' reading of the request
+    that gets OOM-killed is therefore still readable afterwards, which is
+    what reveals whether baseline RSS grows across requests.
+    """
+    try:
+        import time as _time
+        parts = [f'{_time.strftime("%H:%M:%S")}', f'build={APP_BUILD}', f'tag={tag}']
+        for key, value in fields.items():
+            parts.append(f'{key}={value}')
+        log_path = ROOT / 'instance' / 'rss_log.txt'
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, 'a') as fh:
+            fh.write(' '.join(str(p) for p in parts) + '\n')
+    except Exception:
+        pass
 
 # Import prediction service.
 # Lazy: scikit-learn + pandas are heavy (~130MB RSS); on memory-limited hosts
@@ -1170,11 +1207,30 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     else:
                         return jsonify(error=f"Unsupported file type: {file.filename}"), 400
                     
+                    import threading as _threading
+                    _rss_peak = [_rss_mb()]
+                    _rss_stop = [False]
+
+                    def _sample() -> None:
+                        while not _rss_stop[0]:
+                            val = _rss_mb()
+                            if val is not None and (_rss_peak[0] is None or val > _rss_peak[0]):
+                                _rss_peak[0] = val
+                            _threading.Event().wait(0.05)
+
+                    _log_rss('before', kind=file_type, rss=_rss_mb())
+                    _sampler = _threading.Thread(target=_sample, daemon=True)
+                    _sampler.start()
                     result = process_import(
                         file_data=file_data,
                         file_type=file_type,
                         user_currency=user_currency
                     )
+                    _rss_stop[0] = True
+                    _sampler.join(timeout=1)
+                    _log_rss('after', kind=file_type, rss=_rss_mb(),
+                             peak=_rss_peak[0],
+                             txns=len(result.get('transactions', [])))
                 else:
                     return jsonify(error="No file selected"), 400
             
@@ -1205,6 +1261,22 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return jsonify(
                 error=f"Parse failed: {str(exc)}"
             ), 500
+
+    @app.get("/api/import/rss-log")
+    @authenticated
+    def import_rss_log() -> Any:
+        """Return the tail of the on-disk RSS log (diagnostics for OOM hunts).
+
+        Samples are written before/after each import so that when a worker is
+        OOM-killed mid-request, the preceding baseline readings are still
+        readable from a fresh worker.
+        """
+        log_path = ROOT / 'instance' / 'rss_log.txt'
+        try:
+            lines = log_path.read_text().splitlines()[-200:]
+        except FileNotFoundError:
+            lines = []
+        return jsonify(build=APP_BUILD, rss_now=_rss_mb(), lines=lines)
 
     @app.post("/api/import/bulk")
     @authenticated

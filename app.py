@@ -25,7 +25,7 @@ from flask import Flask, g, jsonify, render_template, request, session
 # actually running (Render auto-deploys take a few minutes after push). A
 # descriptive label is used rather than a git hash, since a commit cannot
 # contain its own hash.
-APP_BUILD = "rss-log-3"
+APP_BUILD = "rss-log-4"
 
 
 def _rss_mb() -> float | None:
@@ -1287,6 +1287,18 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         log_path = ROOT / 'instance' / 'rss_log.txt'
         try:
             lines = log_path.read_text().splitlines()[-200:]
+        except FileNotFoundError:
+            lines = []
+        return jsonify(build=APP_BUILD, rss_now=_rss_mb(), lines=lines)
+
+    @app.get("/api/import/rss-test")
+    @authenticated
+    def import_rss_test() -> Any:
+        """Write a test entry and return the log to verify worker file I/O."""
+        _log_rss('test_write', rss=_rss_mb(), pid=os.getpid())
+        log_path = ROOT / 'instance' / 'rss_log.txt'
+        try:
+            lines = log_path.read_text().splitlines()[-50:]
         except FileNotFoundError:
             lines = []
         return jsonify(build=APP_BUILD, rss_now=_rss_mb(), lines=lines)

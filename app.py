@@ -21,9 +21,11 @@ import psycopg
 from psycopg.rows import dict_row
 from flask import Flask, g, jsonify, render_template, request, session
 
-# Build marker: bump on every deploy so live tests can confirm which commit is
-# actually running (Render auto-deploys take a few minutes after push).
-APP_BUILD = "6e2b82a"
+# Build marker: bump on every deploy so live tests can confirm which code is
+# actually running (Render auto-deploys take a few minutes after push). A
+# descriptive label is used rather than a git hash, since a commit cannot
+# contain its own hash.
+APP_BUILD = "inproc-ocr-1"
 
 # Import prediction service.
 # Lazy: scikit-learn + pandas are heavy (~130MB RSS); on memory-limited hosts

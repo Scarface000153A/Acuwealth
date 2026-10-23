@@ -166,7 +166,16 @@ def _ocr_image_with_engine(image) -> str:
     worker (confirmed: the 3rd request died at 18s while 1st/2nd succeeded).
     """
     with _OCR_LOCK:
-        return _rapidocr_image_to_text(image)
+        result = _rapidocr_image_to_text(image)
+    # ONNX's arena is disabled but glibc still may not return freed chunks
+    # to the OS; trim the allocator so RSS drops before the next request.
+    try:
+        import ctypes
+        libc = ctypes.CDLL('libc.so.6')
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+    return result
 
 
 # Optional: cv2 for image preprocessing (Tesseract path only). Probe without
@@ -393,6 +402,17 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                     # Release the rendered page before the next one
                     del page_image
                     gc.collect()
+                    # ONNX's arena is disabled but glibc still may not return
+                    # freed chunks to the OS; trim the allocator so RSS drops
+                    # before the next page's render. Without this, retained
+                    # memory grows across pages and across requests until the
+                    # worker is OOM-killed (Render free tier = 512MB).
+                    try:
+                        import ctypes
+                        libc = ctypes.CDLL('libc.so.6')
+                        libc.malloc_trim(0)
+                    except Exception:
+                        pass
     
     if not text_parts:
         raise RuntimeError(

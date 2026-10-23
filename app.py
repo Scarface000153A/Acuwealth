@@ -25,7 +25,7 @@ from flask import Flask, g, jsonify, render_template, request, session
 # actually running (Render auto-deploys take a few minutes after push). A
 # descriptive label is used rather than a git hash, since a commit cannot
 # contain its own hash.
-APP_BUILD = "arena-disabled-1"
+APP_BUILD = "arena-trim-1"
 
 
 def _rss_mb() -> float | None:

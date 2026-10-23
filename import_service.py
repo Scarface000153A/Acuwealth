@@ -18,13 +18,12 @@ import re
 import io
 import csv
 import gc
+import threading
 from datetime import datetime, date, timedelta
 from typing import Any, Optional
 from decimal import Decimal
 
 from PIL import Image
-import pandas as pd
-import pdfplumber
 
 # Optional: pytesseract for OCR (requires Tesseract binary installed)
 try:
@@ -48,21 +47,25 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
 
-# Optional: rapidocr (pure-pip OCR, works without system binaries - used on servers)
+# Optional: rapidocr (pure-pip OCR, works without system binaries - used on
+# servers). Only probe availability here - importing onnxruntime/opencv at
+# module level bloats the web worker's RSS, which matters on memory-limited
+# hosts (Render free tier = 512MB). The engine is imported on first use.
 try:
-    import numpy as np
-    from rapidocr_onnxruntime import RapidOCR
-    RAPIDOCR_AVAILABLE = True
-except ImportError:
+    import importlib.util as _importlib_util
+    RAPIDOCR_AVAILABLE = _importlib_util.find_spec('rapidocr_onnxruntime') is not None
+except Exception:
     RAPIDOCR_AVAILABLE = False
 
 _ocr_engine = None
+_OCR_LOCK = threading.Lock()
 
 
 def _get_ocr_engine():
     """Lazily create the RapidOCR engine (loads ONNX models on first use)."""
     global _ocr_engine
     if _ocr_engine is None:
+        from rapidocr_onnxruntime import RapidOCR
         _ocr_engine = RapidOCR()
     return _ocr_engine
 
@@ -85,6 +88,7 @@ def _rapidocr_image_to_text(image) -> str:
             Image.LANCZOS)
     
     engine = _get_ocr_engine()
+    import numpy as np
     result, _ = engine(np.array(image))
     if not result:
         return ''
@@ -138,15 +142,19 @@ def _run_ocr_subprocess(mode: str, data: bytes, timeout: int = 280) -> list[str]
     import subprocess
     import sys
     import json as _json
+    import threading
     
     worker_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_ocr_worker.py')
     try:
-        proc = subprocess.run(
-            [sys.executable, worker_path, mode],
-            input=data,
-            capture_output=True,
-            timeout=timeout,
-        )
+        # One OCR child at a time: concurrent children could collectively
+        # exceed the host's memory limit (Render free tier = 512MB).
+        with _OCR_LOCK:
+            proc = subprocess.run(
+                [sys.executable, worker_path, mode],
+                input=data,
+                capture_output=True,
+                timeout=timeout,
+            )
         if proc.returncode != 0:
             return None
         return _json.loads(proc.stdout.decode('utf-8'))
@@ -154,12 +162,12 @@ def _run_ocr_subprocess(mode: str, data: bytes, timeout: int = 280) -> list[str]
         return None
 
 
-# Optional: cv2 for image preprocessing
+# Optional: cv2 for image preprocessing (Tesseract path only). Probe without
+# importing: opencv's import is heavy on RSS; import it where it is used.
 try:
-    import cv2
-    import numpy as np
-    CV2_AVAILABLE = True
-except ImportError:
+    import importlib.util as _importlib_util
+    CV2_AVAILABLE = _importlib_util.find_spec('cv2') is not None
+except Exception:
     CV2_AVAILABLE = False
 
 
@@ -300,6 +308,8 @@ def parse_image_to_text(image_data: bytes) -> str:
     
     # Preprocess if cv2 available for better results
     if CV2_AVAILABLE:
+        import cv2
+        import numpy as np
         img_array = np.array(image)
         # Apply adaptive thresholding
         thresh = cv2.adaptiveThreshold(
@@ -330,6 +340,7 @@ def parse_image_to_text(image_data: bytes) -> str:
 def parse_pdf_to_text(pdf_data: bytes) -> str:
     """Extract text from PDF. Falls back to OCR for scanned PDFs (no text layer)."""
     text_parts = []
+    import pdfplumber
     with pdfplumber.open(io.BytesIO(pdf_data)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
@@ -356,9 +367,10 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                 text_parts = [t for t in page_texts if t and t.strip()]
             else:
                 for page in pdf.pages:
-                    # Render at moderate DPI: high-DPI renders of tall pages spike
-                    # memory on small instances (OCR downscales anyway).
-                    page_image = page.to_image(resolution=150).original
+                    # 200 DPI: lower resolutions make Tesseract misread digits
+                    # (e.g. 150 -> "7150"). Memory is fine here: the Tesseract
+                    # path runs in-process without ONNX runtime.
+                    page_image = page.to_image(resolution=200).original
                     try:
                         try:
                             page_text = pytesseract.image_to_string(page_image, lang='eng')
@@ -388,6 +400,7 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
 def parse_csv_excel(file_data: bytes, file_type: str = 'csv') -> list[dict]:
     """Parse CSV or Excel file to list of transaction dicts."""
     try:
+        import pandas as pd
         if file_type == 'excel':
             df = pd.read_excel(io.BytesIO(file_data))
         else:

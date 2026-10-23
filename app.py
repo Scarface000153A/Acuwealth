@@ -21,13 +21,16 @@ import psycopg
 from psycopg.rows import dict_row
 from flask import Flask, g, jsonify, render_template, request, session
 
-# Import prediction service
+# Import prediction service.
+# Lazy: scikit-learn + pandas are heavy (~130MB RSS); on memory-limited hosts
+# (Render free tier = 512MB) loading them eagerly leaves too little room for
+# request handling. Import on first prediction request instead.
 try:
-    from prediction_service import predict_expenses
-    PREDICTION_AVAILABLE = True
-except ImportError:
+    import importlib.util as _importlib_util
+    PREDICTION_AVAILABLE = _importlib_util.find_spec('prediction_service') is not None
+except Exception:
     PREDICTION_AVAILABLE = False
-    predict_expenses = None
+predict_expenses = None
 
 # Import smart import service
 try:
@@ -1008,6 +1011,17 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return jsonify(
                 error="Prediction service is not available. Please install required ML dependencies."
             ), 503
+
+        # Lazy import: keep scikit-learn's memory out of the idle worker.
+        global predict_expenses
+        if predict_expenses is None:
+            try:
+                from prediction_service import predict_expenses as _predict_expenses
+                predict_expenses = _predict_expenses
+            except ImportError:
+                return jsonify(
+                    error="Prediction service is not available. Please install required ML dependencies."
+                ), 503
 
         db = get_db()
         user_id = g.user["id"]

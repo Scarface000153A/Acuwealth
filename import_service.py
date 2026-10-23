@@ -369,90 +369,116 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
     # Split text into lines
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     
-    # We look for lines containing amounts like "- ₹10", "+ ₹50", "-10", "+50", etc.
+    # First, collect all transaction blocks (Name + Date + Category)
+    # Pattern: Name, Date, Category (with possible OCR noise)
+    blocks = []
     i = 0
     while i < len(lines):
         line = lines[i]
         
-        # Check if this line is an amount
-        # Handle OCR errors: ₹ might be read as =, %, x, n, etc.
-        # Also handle cases where the sign and amount are on the same line as the name
-        # Match patterns like: - ₹10, + ₹50, -10, +50, -₹10.00, - =20, - %50, xO)50, etc.
+        # Look for date pattern (e.g., "15 Oct", "15 Oct, 05:56 PM")
+        date_match = re.search(r'(\d{1,2}\s+[A-Za-z]{3})', line)
+        if date_match:
+            # Found a date - look backward for name, forward for category
+            name = ''
+            date_str = line
+            category = ''
+            
+            # Look backward for name (up to 3 lines)
+            for j in range(max(0, i-3), i):
+                prev = lines[j]
+                # Skip if it looks like a date, amount, or category
+                if re.search(r'[\d₹+\-=xX]', prev):
+                    continue
+                if re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', prev, re.IGNORECASE):
+                    continue
+                if len(prev) > 1:
+                    name = prev
+                    break
+            
+            # Look forward for category (up to 2 lines)
+            for j in range(i+1, min(len(lines), i+3)):
+                next_l = lines[j]
+                cat_match = re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', next_l, re.IGNORECASE)
+                if cat_match:
+                    category = next_l
+                    break
+            
+            blocks.append({
+                'name': name,
+                'date': date_str,
+                'category': category,
+                'line_index': i
+            })
+        
+        i += 1
+    
+    # Now find all amounts
+    amounts = []
+    for i, line in enumerate(lines):
+        # Skip header/footer lines
+        if re.match(r'^(From|In|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance)', line, re.IGNORECASE):
+            continue
+        
+        # Look for amount pattern
         amount_match = re.search(r'([+\-=xX])\s*(?:[₹=%xXnIlOo]?\s*)?([\d,]+\.?\d*)', line)
         if not amount_match:
-            # Fallback: try to find just a number (might be amount without clear sign)
+            # Try just a number (might be amount without clear sign)
             amount_match = re.search(r'([\d,]+\.?\d{2})', line)
             if amount_match:
-                sign = '-'  # Default to expense
+                sign = '-'
                 amount = clean_amount(amount_match.group(1))
             else:
-                i += 1
                 continue
         else:
             sign = amount_match.group(1)
             amount = clean_amount(amount_match.group(2))
         
-        # Skip if amount is too small or too large (likely OCR error)
+        # Skip if amount is too small or too large
         if not amount or float(amount) < 1 or float(amount) > 999999999:
-            i += 1
             continue
         
-        # Now look around this line for Name, Date, and Category
-        name = ''
-        date_str = ''
-        category = ''
+        amounts.append({
+            'line_index': i,
+            'sign': sign,
+            'amount': amount,
+            'line': line
+        })
+    
+    # Match amounts to blocks (nearest preceding block that hasn't been matched)
+    matched_blocks = set()
+    for amount_info in amounts:
+        # Find the nearest preceding block that hasn't been matched yet
+        best_block = None
+        for block in blocks:
+            if block['line_index'] < amount_info['line_index'] and id(block) not in matched_blocks:
+                if best_block is None or block['line_index'] > best_block['line_index']:
+                    best_block = block
         
-        # First, check if name is on the same line as amount (e.g., "Shishupal -n10")
-        same_line_name = line[:amount_match.start()].strip()
-        if same_line_name and not re.search(r'[\d₹+\-=xX]', same_line_name):
-            name = same_line_name
-        
-        # Check previous lines (up to 3 lines back)
-        for j in range(max(0, i-3), i):
-            prev = lines[j]
+        if best_block:
+            matched_blocks.add(id(best_block))
             
-            # Check for date (e.g., "15 Oct", "15 Oct, 05:56 PM")
-            if re.search(r'\d{1,2}\s+[A-Za-z]{3}', prev) or re.search(r'\d{1,2}:\d{2}', prev):
-                date_str = prev
-            elif re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', prev, re.IGNORECASE):
-                category = prev
-            elif not name and len(prev) > 1 and not re.search(r'[\d₹+\-=xX]', prev):
-                name = prev
-        
-        # Check next lines (up to 2 lines forward)
-        for j in range(i+1, min(len(lines), i+3)):
-            next_l = lines[j]
-            if not category and re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', next_l, re.IGNORECASE):
-                category = next_l
-            elif not date_str and (re.search(r'\d{1,2}\s+[A-Za-z]{3}', next_l) or re.search(r'\d{1,2}:\d{2}', next_l)):
-                date_str = next_l
-            elif not name and len(next_l) > 1 and not re.search(r'[\d₹+\-=xX]', next_l):
-                name = next_l
-        
-        if amount:
-            # Determine kind - check for "Money Received" or "+" sign
-            # Also check if the line contains "Money Received" or "In" (Paytm indicator for income)
+            # Determine kind
             is_income = False
-            if sign in ['+', 'x', 'X']:
+            if amount_info['sign'] in ['+', 'x', 'X']:
                 is_income = True
-            elif 'money received' in category.lower() or 'received' in category.lower():
+            elif 'money received' in best_block['category'].lower() or 'received' in best_block['category'].lower():
                 is_income = True
-            elif 'money received' in line.lower() or 'money received' in (name or '').lower():
+            elif 'money received' in amount_info['line'].lower() or 'money received' in (best_block['name'] or '').lower():
                 is_income = True
-            # Check if the original line has "In" (Paytm uses "In" for income)
-            elif re.search(r'\bIn\b', line, re.IGNORECASE):
+            elif re.search(r'\bIn\b', amount_info['line'], re.IGNORECASE):
                 is_income = True
             
             kind = 'income' if is_income else 'expense'
             
             # Normalize date
-            normalized_date = normalize_date(date_str.replace(',', '')) if date_str else date.today().isoformat()
+            normalized_date = normalize_date(best_block['date'].replace(',', '')) if best_block['date'] else date.today().isoformat()
             
             # Auto-categorize
+            category = best_block['category']
             if not category:
-                category = categorize_transaction(name)
+                category = categorize_transaction(best_block['name'])
             else:
-                # Clean category text
                 cat_clean = re.sub(r'[^a-zA-Z\s]', '', category).strip()
                 if cat_clean.lower() in ['fuel', 'food', 'groceries', 'miscellaneous', 'recharge', 'bill']:
                     if cat_clean.lower() == 'fuel': category = 'Transport'
@@ -461,7 +487,7 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
                     elif cat_clean.lower() == 'miscellaneous': category = 'Other expense'
                     else: category = 'Other expense'
                 else:
-                    category = categorize_transaction(name)
+                    category = categorize_transaction(best_block['name'])
             
             # Final category validation
             valid_categories = ['Housing', 'Groceries', 'Transport', 'Utilities', 'Dining', 
@@ -471,13 +497,11 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
             
             transactions.append({
                 'date': normalized_date,
-                'amount': amount,
-                'description': name or 'Paytm Transaction',
+                'amount': amount_info['amount'],
+                'description': best_block['name'] or 'Paytm Transaction',
                 'kind': kind,
                 'category': category,
             })
-        
-        i += 1
     
     return transactions
 

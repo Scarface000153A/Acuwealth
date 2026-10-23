@@ -25,6 +25,12 @@ from decimal import Decimal
 
 from PIL import Image
 
+# Disable ONNX Runtime CPU memory arena to prevent RSS growth across requests.
+# Without this, the arena retains peak memory (~465MB) and isn't returned to
+# the OS, so subsequent imports start high and OOM the worker (Render 512MB).
+import os
+os.environ.setdefault('ORT_DISABLE_CPU_MEM_ARENA', '1')
+
 # Optional: pytesseract for OCR (requires Tesseract binary installed)
 try:
     import pytesseract

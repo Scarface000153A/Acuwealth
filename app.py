@@ -25,7 +25,7 @@ from flask import Flask, g, jsonify, render_template, request, session
 # actually running (Render auto-deploys take a few minutes after push). A
 # descriptive label is used rather than a git hash, since a commit cannot
 # contain its own hash.
-APP_BUILD = "rss-log-5"
+APP_BUILD = "arena-disabled-1"
 
 
 def _rss_mb() -> float | None:
@@ -1194,8 +1194,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @authenticated
     def parse_import() -> Any:
         """Parse uploaded file or text for transactions."""
-        import sys
-        print(f'IMPORT_START: pid={os.getpid()}', file=sys.stderr, flush=True)
         if not IMPORT_AVAILABLE:
             return jsonify(
                 error="Import service is not available. Please install required dependencies."
@@ -1222,8 +1220,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     else:
                         return jsonify(error=f"Unsupported file type: {file.filename}"), 400
                     
-                    import sys
-                    print(f'IMPORT_BEFORE_LOG: pid={os.getpid()}', file=sys.stderr, flush=True)
                     import threading as _threading
                     _rss_peak = [_rss_mb()]
                     _rss_stop = [False]

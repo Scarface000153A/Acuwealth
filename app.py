@@ -25,7 +25,7 @@ from flask import Flask, g, jsonify, render_template, request, session
 # actually running (Render auto-deploys take a few minutes after push). A
 # descriptive label is used rather than a git hash, since a commit cannot
 # contain its own hash.
-APP_BUILD = "inproc-ocr-1"
+APP_BUILD = "cache-engine-1"
 
 # Import prediction service.
 # Lazy: scikit-learn + pandas are heavy (~130MB RSS); on memory-limited hosts

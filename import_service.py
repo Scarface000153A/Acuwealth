@@ -62,7 +62,15 @@ _OCR_LOCK = threading.Lock()
 
 
 def _get_ocr_engine():
-    """Lazily create the RapidOCR engine (loads ONNX models on first use)."""
+    """Lazily create the RapidOCR engine (loads ONNX models on first use).
+
+    The engine is deliberately CACHED for the life of the worker. ONNX
+    Runtime's arena memory is not returned to the OS when the engine is
+    dropped on Linux (glibc keeps it), so releasing and re-loading it would
+    allocate a SECOND arena on top of the retained one until the worker is
+    OOM-killed (Render free tier = 512MB). Keeping one engine means its
+    memory is allocated once and reused by every later import.
+    """
     global _ocr_engine
     if _ocr_engine is None:
         from rapidocr_onnxruntime import RapidOCR
@@ -71,11 +79,10 @@ def _get_ocr_engine():
 
 
 def _release_ocr_engine():
-    """Drop the RapidOCR engine and free ONNX Runtime's retained arena memory.
+    """Drop the RapidOCR engine (freed memory is NOT reliably returned on Linux).
 
-    ONNX Runtime keeps arena memory after inference, so a long-lived worker's
-    RSS only grows across imports. Dropping the engine (and letting gc run)
-    returns that memory so the worker stays under the host's limit.
+    Kept only for tests/forced resets. Normal request handling must NOT call
+    this: see _get_ocr_engine's docstring for why releasing is harmful.
     """
     global _ocr_engine
     _ocr_engine = None
@@ -143,19 +150,17 @@ def _rapidocr_image_to_text(image) -> str:
 
 
 def _ocr_image_with_engine(image) -> str:
-    """Run RapidOCR under a lock, then release the engine's memory.
+    """Run RapidOCR under a lock (engine is cached, not released).
 
     The lock serializes OCR across gunicorn threads (threads=2): two
     concurrent OCR requests would roughly double peak RSS (~427MB each) and
-    exceed the host's limit (Render free tier = 512MB). Releasing the engine
-    here (not at call sites) keeps the release inside the lock so a second
-    thread can't load the engine mid-release.
+    exceed the host's limit (Render free tier = 512MB). The engine is NOT
+    released here - ONNX memory isn't returned to the OS on Linux, so
+    re-loading per request would accumulate a second arena and OOM the
+    worker (confirmed: the 3rd request died at 18s while 1st/2nd succeeded).
     """
     with _OCR_LOCK:
-        try:
-            return _rapidocr_image_to_text(image)
-        finally:
-            _release_ocr_engine()
+        return _rapidocr_image_to_text(image)
 
 
 # Optional: cv2 for image preprocessing (Tesseract path only). Probe without
@@ -345,49 +350,43 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                     "This PDF has no selectable text (it is a scanned document) "
                     "and no OCR engine is installed on this server."
                 )
-            # Hold the lock for the whole PDF: load ONNX models once, process
-            # every page, then release. Per-page lock/unlock would reload the
-            # models on each page. The lock serializes concurrent OCR requests
-            # so two threads can't double peak RSS.
+            # Hold the lock for the whole PDF so concurrent imports can't
+            # double peak RSS. The engine is cached (not released): ONNX
+            # memory is not returned to the OS on Linux, so releasing between
+            # requests made the worker accumulate a second arena and get
+            # OOM-killed. Each page's render buffer is freed before the next.
             with _OCR_LOCK:
-                try:
-                    for page in pdf.pages:
-                        if TESSERACT_AVAILABLE:
-                            # 200 DPI: lower resolutions make Tesseract misread
-                            # digits (e.g. 150 -> "7150").
-                            render_dpi = 200
-                        else:
-                            # RapidOCR downscales to a 1400px max side anyway
-                            # (~120 DPI for A4), so rendering larger only grows
-                            # peak RSS on memory-limited hosts without adding
-                            # detail. Render near the size RapidOCR will use.
-                            render_dpi = 130
-                        page_image = page.to_image(resolution=render_dpi).original
-                        page_text = ''
-                        if TESSERACT_AVAILABLE:
+                for page in pdf.pages:
+                    if TESSERACT_AVAILABLE:
+                        # 200 DPI: lower resolutions make Tesseract misread
+                        # digits (e.g. 150 -> "7150").
+                        render_dpi = 200
+                    else:
+                        # RapidOCR downscales to a 1400px max side anyway
+                        # (~120 DPI for A4), so rendering larger only grows
+                        # peak RSS on memory-limited hosts without adding
+                        # detail. Render near the size RapidOCR will use.
+                        render_dpi = 130
+                    page_image = page.to_image(resolution=render_dpi).original
+                    page_text = ''
+                    if TESSERACT_AVAILABLE:
+                        try:
                             try:
-                                try:
-                                    page_text = pytesseract.image_to_string(page_image, lang='eng')
-                                except Exception:
-                                    page_text = pytesseract.image_to_string(page_image)
+                                page_text = pytesseract.image_to_string(page_image, lang='eng')
                             except Exception:
-                                page_text = ''  # binary missing - use RapidOCR below
-                        if not page_text.strip() and RAPIDOCR_AVAILABLE:
-                            try:
-                                page_text = _rapidocr_image_to_text(page_image.convert('RGB'))
-                            except Exception as e:
-                                raise RuntimeError(f"OCR failed while reading the PDF: {e}")
-                        if page_text and page_text.strip():
-                            text_parts.append(page_text)
-                        # Release the rendered page before the next one
-                        del page_image
-                        gc.collect()
-                finally:
-                    # Free ONNX Runtime's arena after the request so the worker's
-                    # RSS returns to baseline. Without this, memory retained from
-                    # the engine accumulates across imports until the host's limit
-                    # (Render free tier = 512MB) is hit and the worker is OOM-killed.
-                    _release_ocr_engine()
+                                page_text = pytesseract.image_to_string(page_image)
+                        except Exception:
+                            page_text = ''  # binary missing - use RapidOCR below
+                    if not page_text.strip() and RAPIDOCR_AVAILABLE:
+                        try:
+                            page_text = _rapidocr_image_to_text(page_image.convert('RGB'))
+                        except Exception as e:
+                            raise RuntimeError(f"OCR failed while reading the PDF: {e}")
+                    if page_text and page_text.strip():
+                        text_parts.append(page_text)
+                    # Release the rendered page before the next one
+                    del page_image
+                    gc.collect()
     
     if not text_parts:
         raise RuntimeError(

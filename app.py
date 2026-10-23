@@ -25,7 +25,7 @@ from flask import Flask, g, jsonify, render_template, request, session
 # actually running (Render auto-deploys take a few minutes after push). A
 # descriptive label is used rather than a git hash, since a commit cannot
 # contain its own hash.
-APP_BUILD = "rss-log-2"
+APP_BUILD = "rss-log-3"
 
 
 def _rss_mb() -> float | None:
@@ -55,18 +55,24 @@ def _log_rss(tag: str, **fields: Any) -> None:
     try:
         import time as _time
         import os
+        import sys
         parts = [f'{_time.strftime("%H:%M:%S")}', f'build={APP_BUILD}', f'tag={tag}']
         for key, value in fields.items():
             parts.append(f'{key}={value}')
+        line = ' '.join(str(p) for p in parts) + '\n'
+        # Print to stderr so it appears in Render logs even if file write fails
+        print(f'RSS_LOG: {line.strip()}', file=sys.stderr, flush=True)
         log_path = ROOT / 'instance' / 'rss_log.txt'
         log_path.parent.mkdir(parents=True, exist_ok=True)
         # Unbuffered write with fsync so data survives immediate OOM kill
         with open(log_path, 'a', buffering=1) as fh:
-            fh.write(' '.join(str(p) for p in parts) + '\n')
+            fh.write(line)
             fh.flush()
             os.fsync(fh.fileno())
-    except Exception:
-        pass
+    except Exception as e:
+        # Don't fail silently - print to stderr so we see it in Render logs
+        import sys
+        print(f'RSS_LOG_ERROR: {e}', file=sys.stderr, flush=True)
 
 # Import prediction service.
 # Lazy: scikit-learn + pandas are heavy (~130MB RSS); on memory-limited hosts

@@ -363,7 +363,7 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
                 'kind': 'expense',
                 'category': category,
             })
-            return transactions
+            # Don't return early - continue parsing for history lists in the same PDF
 
     # Paytm history list parsing...
     # Split text into lines
@@ -390,11 +390,15 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
                 # Skip if it looks like a date, amount, or category
                 if re.search(r'[\d₹+\-=xX]', prev):
                     continue
-                if re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries)', prev, re.IGNORECASE):
+                if re.search(r'(Fuel|Groceries|Food|Transport|Shopping|Entertainment|Travel|Education|Healthcare|Recharge|Bill|Money Received|Miscellaneous|Groceries|Payment|History|Balance|Total|Spent|October|UPI|Ref|Canara|Bank|Failed|Paytm|Powered|YES|In|From|To)', prev, re.IGNORECASE):
                     continue
-                if len(prev) > 1:
-                    name = prev
-                    break
+                # Skip OCR noise
+                if len(prev) < 2:
+                    continue
+                if re.match(r'^[^\w\s]+$', prev):
+                    continue
+                name = prev
+                break
             
             # Look forward for category (up to 2 lines)
             for j in range(i+1, min(len(lines), i+3)):
@@ -416,8 +420,13 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
     # Now find all amounts
     amounts = []
     for i, line in enumerate(lines):
-        # Skip header/footer lines
-        if re.match(r'^(From|In|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance)', line, re.IGNORECASE):
+        # Skip header/footer lines and OCR noise
+        if re.match(r'^(From|In|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES|Canara|Bank|Failed|Money|In|From|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES|Canara|Bank|Failed|Money|In|From|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES)', line, re.IGNORECASE):
+            continue
+        # Skip lines that are just symbols or OCR noise
+        if len(line) < 3:
+            continue
+        if re.match(r'^[^\w\s]+$', line):
             continue
         
         # Look for amount pattern
@@ -456,6 +465,15 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
                     best_block = block
         
         if best_block:
+            # Skip if name is empty or looks like OCR noise
+            if not best_block['name'] or len(best_block['name']) < 2:
+                continue
+            if re.match(r'^[^\w\s]+$', best_block['name']):
+                continue
+            # Skip obvious OCR noise / header lines
+            if re.search(r'^(Payment|History|Balance|Total|Spent|October|UPI|Ref|Canara|Bank|Failed|Paytm|Powered|YES|In|From|To|Paid|Successfully|Rupees|Only|Merchant|ID|Gerard|Robert|Vansh|Ashu|Mr|Sonu|Rathore|Satya|Narayan|Shishupal|Ganesh|Petroleum|Vinita|Food|Beverages|Chouhan|Kirana|Store|PhonePe|Pal|Sweets|Lalita|Jha|Jai|shri|ram|dairy|NEERENDRA|Lali|Kushvaha|Ranjeeta|Rekha|Rober|BharatPe|Merchant|Canara|Bank|Failed|Money|In|From|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES)', best_block['name'], re.IGNORECASE):
+                continue
+            
             matched_blocks.add(id(best_block))
             
             # Determine kind

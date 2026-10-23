@@ -17,6 +17,7 @@ Auto-detects:
 import re
 import io
 import csv
+import gc
 from datetime import datetime, date, timedelta
 from typing import Any, Optional
 from decimal import Decimal
@@ -68,15 +69,15 @@ def _get_ocr_engine():
 
 def _rapidocr_image_to_text(image) -> str:
     """OCR an image with RapidOCR and reconstruct reading-order text.
-    
+
     RapidOCR returns positioned text boxes. We group them into lines by
     vertical position, order left-to-right, and re-insert the spaces it
     tends to drop between letters/digits (e.g. "22Oct2026" -> "22 Oct 2026").
     """
-    # Cap image size: full-size A4 scans at 200 DPI exhaust the memory of
-    # small server instances (Render free tier = 512MB -> worker OOM kill).
-    # PP-OCR is accurate on ~1600px images.
-    max_side = 1600
+    # Cap image size: full-size A4 scans exhaust the memory of small server
+    # instances (Render free tier = 512MB -> worker OOM kill). PP-OCR is
+    # accurate on ~1400px images.
+    max_side = 1400
     if max(image.size) > max_side:
         scale = max_side / max(image.size)
         image = image.resize(
@@ -123,6 +124,35 @@ def _rapidocr_image_to_text(image) -> str:
         out_lines.append(line_text)
     
     return '\n'.join(out_lines)
+
+
+def _run_ocr_subprocess(mode: str, data: bytes, timeout: int = 280) -> list[str]:
+    """OCR in a short-lived subprocess; returns list of page texts.
+    
+    ONNX Runtime keeps arena memory after inference, so repeated imports in
+    the long-lived web worker eventually exceed small instances' limits
+    (Render free = 512MB -> worker OOM kill). A subprocess returns all of its
+    memory to the OS when it exits. Falls back to None if the worker fails;
+    callers then OCR in-process.
+    """
+    import subprocess
+    import sys
+    import json as _json
+    
+    worker_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_ocr_worker.py')
+    try:
+        proc = subprocess.run(
+            [sys.executable, worker_path, mode],
+            input=data,
+            capture_output=True,
+            timeout=timeout,
+        )
+        if proc.returncode != 0:
+            return None
+        return _json.loads(proc.stdout.decode('utf-8'))
+    except Exception:
+        return None
+
 
 # Optional: cv2 for image preprocessing
 try:
@@ -241,7 +271,13 @@ def parse_image_to_text(image_data: bytes) -> str:
     
     if not TESSERACT_AVAILABLE:
         if RAPIDOCR_AVAILABLE:
-            # RapidOCR handles dark-mode screenshots well without preprocessing
+            # OCR in a subprocess so ONNX Runtime memory is released on exit
+            # (the web worker would otherwise grow until OOM on small hosts).
+            texts = _run_ocr_subprocess('image', image_data)
+            if texts:
+                return texts[0]
+            # Subprocess unavailable/failed - OCR in-process as a last resort.
+            # RapidOCR handles dark-mode screenshots well without preprocessing.
             return _rapidocr_image_to_text(image.convert('RGB'))
         raise RuntimeError("No OCR engine is installed (need Tesseract or rapidocr-onnxruntime).")
     
@@ -307,10 +343,22 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                     "This PDF has no selectable text (it is a scanned document) "
                     "and no OCR engine is installed on this server."
                 )
-            for page in pdf.pages:
-                page_image = page.to_image(resolution=200).original
-                page_text = ''
-                if TESSERACT_AVAILABLE:
+            if not TESSERACT_AVAILABLE:
+                # OCR in a subprocess: ONNX Runtime's memory is fully released
+                # when it exits, protecting the web worker from OOM on
+                # memory-limited hosts (e.g. Render free tier).
+                page_texts = _run_ocr_subprocess('pdf', pdf_data)
+                if page_texts is None:
+                    raise RuntimeError(
+                        "OCR failed while reading the PDF. Please try again or "
+                        "upload a smaller file."
+                    )
+                text_parts = [t for t in page_texts if t and t.strip()]
+            else:
+                for page in pdf.pages:
+                    # Render at moderate DPI: high-DPI renders of tall pages spike
+                    # memory on small instances (OCR downscales anyway).
+                    page_image = page.to_image(resolution=150).original
                     try:
                         try:
                             page_text = pytesseract.image_to_string(page_image, lang='eng')
@@ -318,13 +366,16 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                             page_text = pytesseract.image_to_string(page_image)
                     except Exception:
                         page_text = ''  # binary missing - use RapidOCR below
-                if not page_text.strip() and RAPIDOCR_AVAILABLE:
-                    try:
-                        page_text = _rapidocr_image_to_text(page_image.convert('RGB'))
-                    except Exception as e:
-                        raise RuntimeError(f"OCR failed while reading the PDF: {e}")
-                if page_text and page_text.strip():
-                    text_parts.append(page_text)
+                    if not page_text.strip() and RAPIDOCR_AVAILABLE:
+                        try:
+                            page_text = _rapidocr_image_to_text(page_image.convert('RGB'))
+                        except Exception as e:
+                            raise RuntimeError(f"OCR failed while reading the PDF: {e}")
+                    if page_text and page_text.strip():
+                        text_parts.append(page_text)
+                    # Release the rendered page before the next one
+                    del page_image
+                    gc.collect()
     
     if not text_parts:
         raise RuntimeError(

@@ -47,6 +47,73 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
 
+# Optional: rapidocr (pure-pip OCR, works without system binaries - used on servers)
+try:
+    import numpy as np
+    from rapidocr_onnxruntime import RapidOCR
+    RAPIDOCR_AVAILABLE = True
+except ImportError:
+    RAPIDOCR_AVAILABLE = False
+
+_ocr_engine = None
+
+
+def _get_ocr_engine():
+    """Lazily create the RapidOCR engine (loads ONNX models on first use)."""
+    global _ocr_engine
+    if _ocr_engine is None:
+        _ocr_engine = RapidOCR()
+    return _ocr_engine
+
+
+def _rapidocr_image_to_text(image) -> str:
+    """OCR an image with RapidOCR and reconstruct reading-order text.
+    
+    RapidOCR returns positioned text boxes. We group them into lines by
+    vertical position, order left-to-right, and re-insert the spaces it
+    tends to drop between letters/digits (e.g. "22Oct2026" -> "22 Oct 2026").
+    """
+    engine = _get_ocr_engine()
+    result, _ = engine(np.array(image))
+    if not result:
+        return ''
+    
+    # Each item: [box(4 points), text, score]
+    items = []
+    for box, text, score in result:
+        if not text or not text.strip():
+            continue
+        xs = [p[0] for p in box]
+        ys = [p[1] for p in box]
+        items.append({
+            'x': min(xs), 'y': min(ys), 'h': max(ys) - min(ys), 'text': text.strip(),
+        })
+    
+    # Group into lines: items whose vertical centers are close together
+    items.sort(key=lambda it: it['y'])
+    lines = []
+    for item in items:
+        placed = False
+        for line in lines:
+            ref = line[0]
+            if abs((item['y'] + item['h'] / 2) - (ref['y'] + ref['h'] / 2)) < max(item['h'], ref['h']) * 0.6:
+                line.append(item)
+                placed = True
+                break
+        if not placed:
+            lines.append([item])
+    
+    out_lines = []
+    for line in lines:
+        line.sort(key=lambda it: it['x'])
+        line_text = ' '.join(it['text'] for it in line)
+        # Re-insert spaces the model drops between digit/letter boundaries
+        line_text = re.sub(r'(\d)([A-Za-z])', r'\1 \2', line_text)
+        line_text = re.sub(r'([A-Za-z])(\d)', r'\1 \2', line_text)
+        out_lines.append(line_text)
+    
+    return '\n'.join(out_lines)
+
 # Optional: cv2 for image preprocessing
 try:
     import cv2
@@ -159,11 +226,14 @@ UPI_APPS = ['google pay', 'gpay', 'phonepe', 'paytm', 'bhIM', 'amazon pay', 'wha
 
 
 def parse_image_to_text(image_data: bytes) -> str:
-    """Extract text from image using OCR."""
-    if not TESSERACT_AVAILABLE:
-        raise RuntimeError("Tesseract OCR is not installed. Please install it or use PDF/CSV import.")
-    
+    """Extract text from image using OCR (Tesseract, falling back to RapidOCR)."""
     image = Image.open(io.BytesIO(image_data))
+    
+    if not TESSERACT_AVAILABLE:
+        if RAPIDOCR_AVAILABLE:
+            # RapidOCR handles dark-mode screenshots well without preprocessing
+            return _rapidocr_image_to_text(image.convert('RGB'))
+        raise RuntimeError("No OCR engine is installed (need Tesseract or rapidocr-onnxruntime).")
     
     # Preprocess image for better OCR results
     # Convert to grayscale
@@ -193,11 +263,20 @@ def parse_image_to_text(image_data: bytes) -> str:
         image = Image.fromarray(thresh)
     
     # Extract text with English support for Indian UPI apps
-    # Use both eng and hin for better results with Indian text
     try:
         text = pytesseract.image_to_string(image, lang='eng')
-    except:
-        text = pytesseract.image_to_string(image)
+    except Exception:
+        try:
+            text = pytesseract.image_to_string(image)
+        except Exception as e:
+            # Tesseract binary missing/broken - fall back to RapidOCR
+            if RAPIDOCR_AVAILABLE:
+                return _rapidocr_image_to_text(Image.open(io.BytesIO(image_data)).convert('RGB'))
+            raise RuntimeError(f"OCR failed: {e}")
+    
+    if not text.strip() and RAPIDOCR_AVAILABLE:
+        # Tesseract returned nothing (e.g. dark-mode screenshots) - try RapidOCR
+        return _rapidocr_image_to_text(Image.open(io.BytesIO(image_data)).convert('RGB'))
     
     return text
 
@@ -213,27 +292,34 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
         
         # Scanned PDF fallback: if no text layer found, OCR each page
         if not text_parts:
-            if not TESSERACT_AVAILABLE:
+            if not TESSERACT_AVAILABLE and not RAPIDOCR_AVAILABLE:
                 raise RuntimeError(
                     "This PDF has no selectable text (it is a scanned document) "
-                    "and OCR support is not installed on this server."
+                    "and no OCR engine is installed on this server."
                 )
             for page in pdf.pages:
-                try:
-                    page_image = page.to_image(resolution=200).original
+                page_image = page.to_image(resolution=200).original
+                page_text = ''
+                if TESSERACT_AVAILABLE:
                     try:
-                        page_text = pytesseract.image_to_string(page_image, lang='eng')
+                        try:
+                            page_text = pytesseract.image_to_string(page_image, lang='eng')
+                        except Exception:
+                            page_text = pytesseract.image_to_string(page_image)
                     except Exception:
-                        page_text = pytesseract.image_to_string(page_image)
-                    if page_text and page_text.strip():
-                        text_parts.append(page_text)
-                except Exception as e:
-                    raise RuntimeError(f"OCR failed while reading the PDF: {e}")
+                        page_text = ''  # binary missing - use RapidOCR below
+                if not page_text.strip() and RAPIDOCR_AVAILABLE:
+                    try:
+                        page_text = _rapidocr_image_to_text(page_image.convert('RGB'))
+                    except Exception as e:
+                        raise RuntimeError(f"OCR failed while reading the PDF: {e}")
+                if page_text and page_text.strip():
+                    text_parts.append(page_text)
     
     if not text_parts:
         raise RuntimeError(
             "No text could be extracted from this PDF. "
-            "If it is a scanned document, ensure Tesseract OCR is installed on the server."
+            "If it is a scanned document, ensure OCR (Tesseract) is installed on the server."
         )
     return '\n'.join(text_parts)
 
@@ -346,6 +432,9 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
     """Parse Paytm Payment History or Receipt screenshot format specifically."""
     transactions = []
     
+    # OCR artifact fixes (RapidOCR merges the day with "Oct": "190 ct" -> "19 Oct")
+    text = re.sub(r'\b(\d{2})\s*0\s+ct\b', r'\1 Oct', text)
+    
     # Check if this is a Paytm Receipt screenshot
     # Use fuzzy matching for receipt indicators
     is_receipt = any(re.search(p, text, re.IGNORECASE) for p in [
@@ -353,20 +442,24 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
     ])
     
     if is_receipt:
-        # Extract amount - look for a large number following a currency symbol or near "Paid"
-        # Matches: ₹40, Rs 40, 40, etc.
-        amount_match = re.search(r'(?:₹|Rs\.?|[^\d\s\w])\s*(\d{1,10}(?:\.\d{2})?)', text)
-        if not amount_match:
-            # Try finding any large number if currency symbol is misread
-            amounts = re.findall(r'\b\d{1,10}(?:\.\d{2})?\b', text)
-            if amounts:
-                # The largest number is usually the amount in a receipt
-                amount = max(amounts, key=lambda x: float(x.replace(',', '')))
-            else:
-                amount = None
-        else:
-            amount = clean_amount(amount_match.group(1))
-            
+        # Restrict the amount search to the header area above the "To:"/UPI-ID
+        # details: RapidOCR reads stray digits from UPI IDs / ref numbers
+        # (e.g. "bharatpe.9 u 0 j..." -> 9), which must not become the amount.
+        header = text
+        stop = re.search(r'(?:UPI\s*ID|From\s*:|Ref\s*No)', text, re.IGNORECASE)
+        if stop:
+            header = text[:stop.start()]
+        
+        # Extract amount - look for a standalone number on its own line
+        # (e.g. "~40%", "₹40", "Rs 40"). A standalone-line match avoids dates
+        # ("22 Oct 2026") and reference numbers, which mix letters/digits/symbols.
+        amount = None
+        for m in re.finditer(r'^\s*[^\d\s]*([\d][\d,]*(?:\.\d{2})?)\s*[^\d\s]*\s*$', header, re.MULTILINE):
+            candidate = clean_amount(m.group(1))
+            if candidate and float(candidate) not in (2024, 2025, 2026, 2027):
+                amount = candidate
+                break
+        
         # Extract recipient name
         name_match = re.search(r'(?:To:?|Paid to)\s*([^\n]+)', text, re.IGNORECASE)
         # Extract date - try multiple formats
@@ -486,7 +579,7 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
         segments[-1].append(line)
     
     def parse_amount_line(line):
-        """Return (sign, amount) if the line contains an amount, else None."""
+        """Return (sign, amount, match) if the line contains an amount, else None."""
         if re.match(r'^(From|In|To|UPI|Ref|Canara|Bank|Failed|Money|Payment|History|October|Total|Spent|Balance|Paytm|Powered|YES)\b', line, re.IGNORECASE):
             return None
         if len(line) < 3:
@@ -502,17 +595,20 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
         # Skip UPI ID / account lines
         if '@' in line or re.search(r'\d{5,}[a-zA-Z]|[a-zA-Z]\d{5,}', line):
             return None
+        def _valid(amt):
+            return amt and 1 <= float(amt) <= 999999999 and float(amt) not in (2024, 2025, 2026, 2027)
+
         # Paytm amounts carry a sign: - ₹10, + ₹50, - $150, += ₹2500, - %50...
-        # The symbol may be an OCR replacement char, so allow any single non-word char.
-        m = re.search(r'([+\-=]+)\s*(?:[^\w\s]?\s*)?([\d,]+\.?\d*)', line)
-        if not m:
-            return None
-        amt = clean_amount(m.group(2))
-        if not amt or float(amt) < 1 or float(amt) > 999999999:
-            return None
-        if float(amt) in (2024, 2025, 2026, 2027):
-            return None
-        return ('+' if '+' in m.group(1) else '-'), amt
+        # The symbol may be an OCR replacement char or a stray 'R' (misread ₹).
+        m = re.search(r'([+\-=]+)\s*(?:[^\w\s]|R)?\s*([\d,]+\.?\d*)', line)
+        if m and _valid(clean_amount(m.group(2))):
+            return ('+' if '+' in m.group(1) else '-'), clean_amount(m.group(2)), m.start()
+        # RapidOCR sometimes drops the sign entirely: "Vinita Food And Beverages 20"
+        # -> expense of 20. Bare amount must trail the line after a digit-free name.
+        m = re.search(r"([A-Za-z][A-Za-z\s.,'&/-]*?)\s+(\d[\d,]*\.?\d*)\s*$", line)
+        if m and _valid(clean_amount(m.group(2))):
+            return '-', clean_amount(m.group(2)), m.start(2)
+        return None
     
     def clean_name(s):
         """Strip trailing OCR junk symbols; return None if not a plausible name."""
@@ -527,6 +623,8 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
             return None
         if '@' in s:
             return None
+        # Split CamelCase words joined by OCR (e.g. "VanshNew" -> "Vansh New")
+        s = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
         return s
     
     def find_name(seg, date_idx):
@@ -534,19 +632,26 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
         inline_amount = None
         inline_name = None
         first_clean = None
-        for j in range(max(0, date_idx - 3), date_idx):
+        # Look back closest-first: the line immediately above the date belongs
+        # to it; stop at the previous block's boundary (its date or category
+        # line) so we never steal that row's amount.
+        for j in range(date_idx - 1, max(0, date_idx - 4) - 1, -1):
             prev = seg[j]
+            if (re.search(r'\d{1,2}\s+[A-Za-z]{3}', prev)
+                    or re.match(r'(Today|Yesterday),\s*\d{1,2}:\d{2}', prev, re.IGNORECASE)
+                    or CAT_KEYWORDS.fullmatch(prev.strip())):
+                break
             parsed = parse_amount_line(prev)
             candidate = prev
             if parsed:
-                m = re.search(r'([+\-=]+)\s*(?:[^\w\s]?\s*)?[\d,]+\.?\d*', prev)
-                before = clean_name(prev[:m.start()])
+                sign, amt, amt_pos = parsed
+                before = clean_name(prev[:amt_pos])
                 if before:
                     # Inline amount on this line: definitive name line
-                    return before, parsed
+                    return before, (sign, amt)
                 if inline_amount is None:
-                    inline_amount = parsed
-                    inline_name = clean_name(prev[:m.start()])
+                    inline_amount = (sign, amt)
+                    inline_name = before
                 continue
             candidate = clean_name(prev)
             if candidate and first_clean is None:
@@ -564,6 +669,8 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
             )
             if not is_date_line:
                 continue
+            if re.search(r'\bFailed\b', line, re.IGNORECASE):
+                continue  # failed payments are not real transactions
             name, inline_amount = find_name(segment, i)
             
             category = ''
@@ -600,7 +707,7 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
         for line in segment:
             parsed = parse_amount_line(line)
             if parsed:
-                amounts.append(parsed)
+                amounts.append((parsed[0], parsed[1]))
         
         for (sign, amt), block in zip(amounts, pending_blocks):
             txn = build_transaction(block, sign, '', amt)
@@ -863,7 +970,7 @@ def process_import(
         # Determine source and extract text/transactions
         if file_data and file_type:
             if file_type == 'image':
-                if not TESSERACT_AVAILABLE:
+                if not TESSERACT_AVAILABLE and not RAPIDOCR_AVAILABLE:
                     result['errors'].append("OCR is not available. Please install Tesseract or use PDF/CSV import.")
                     return result
                 

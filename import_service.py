@@ -212,7 +212,12 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                 text_parts.append(page_text)
         
         # Scanned PDF fallback: if no text layer found, OCR each page
-        if not text_parts and TESSERACT_AVAILABLE:
+        if not text_parts:
+            if not TESSERACT_AVAILABLE:
+                raise RuntimeError(
+                    "This PDF has no selectable text (it is a scanned document) "
+                    "and OCR support is not installed on this server."
+                )
             for page in pdf.pages:
                 try:
                     page_image = page.to_image(resolution=200).original
@@ -222,9 +227,14 @@ def parse_pdf_to_text(pdf_data: bytes) -> str:
                         page_text = pytesseract.image_to_string(page_image)
                     if page_text and page_text.strip():
                         text_parts.append(page_text)
-                except Exception:
-                    continue  # skip pages that fail to render/OCR
+                except Exception as e:
+                    raise RuntimeError(f"OCR failed while reading the PDF: {e}")
     
+    if not text_parts:
+        raise RuntimeError(
+            "No text could be extracted from this PDF. "
+            "If it is a scanned document, ensure Tesseract OCR is installed on the server."
+        )
     return '\n'.join(text_parts)
 
 

@@ -2,7 +2,7 @@ services:
   - type: web
     name: acuwealth
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: apt-get update -y && apt-get install -y tesseract-ocr && pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
     envVars:
       - key: APP_ENV

@@ -73,6 +73,16 @@ def _rapidocr_image_to_text(image) -> str:
     vertical position, order left-to-right, and re-insert the spaces it
     tends to drop between letters/digits (e.g. "22Oct2026" -> "22 Oct 2026").
     """
+    # Cap image size: full-size A4 scans at 200 DPI exhaust the memory of
+    # small server instances (Render free tier = 512MB -> worker OOM kill).
+    # PP-OCR is accurate on ~1600px images.
+    max_side = 1600
+    if max(image.size) > max_side:
+        scale = max_side / max(image.size)
+        image = image.resize(
+            (max(1, int(image.size[0] * scale)), max(1, int(image.size[1] * scale))),
+            Image.LANCZOS)
+    
     engine = _get_ocr_engine()
     result, _ = engine(np.array(image))
     if not result:
@@ -451,10 +461,10 @@ def parse_paytm_screenshot(text: str) -> list[dict]:
             header = text[:stop.start()]
         
         # Extract amount - look for a standalone number on its own line
-        # (e.g. "~40%", "₹40", "Rs 40"). A standalone-line match avoids dates
-        # ("22 Oct 2026") and reference numbers, which mix letters/digits/symbols.
+        # (e.g. "~40%", "Rs 40", "₹40"). A standalone-line match avoids dates
+        # ("22 Oct 2026") and reference numbers, which mix letters/digits.
         amount = None
-        for m in re.finditer(r'^\s*[^\d\s]*([\d][\d,]*(?:\.\d{2})?)\s*[^\d\s]*\s*$', header, re.MULTILINE):
+        for m in re.finditer(r'^\s*(?:[^\d\s]*\s*)?([\d][\d,]*(?:\.\d{2})?)\s*[^\d\s]*\s*$', header, re.MULTILINE):
             candidate = clean_amount(m.group(1))
             if candidate and float(candidate) not in (2024, 2025, 2026, 2027):
                 amount = candidate

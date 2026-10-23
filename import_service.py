@@ -203,13 +203,28 @@ def parse_image_to_text(image_data: bytes) -> str:
 
 
 def parse_pdf_to_text(pdf_data: bytes) -> str:
-    """Extract text from PDF (bank statements, UPI exports)."""
+    """Extract text from PDF. Falls back to OCR for scanned PDFs (no text layer)."""
     text_parts = []
     with pdfplumber.open(io.BytesIO(pdf_data)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
             if page_text:
                 text_parts.append(page_text)
+        
+        # Scanned PDF fallback: if no text layer found, OCR each page
+        if not text_parts and TESSERACT_AVAILABLE:
+            for page in pdf.pages:
+                try:
+                    page_image = page.to_image(resolution=200).original
+                    try:
+                        page_text = pytesseract.image_to_string(page_image, lang='eng')
+                    except Exception:
+                        page_text = pytesseract.image_to_string(page_image)
+                    if page_text and page_text.strip():
+                        text_parts.append(page_text)
+                except Exception:
+                    continue  # skip pages that fail to render/OCR
+    
     return '\n'.join(text_parts)
 
 
